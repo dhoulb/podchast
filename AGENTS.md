@@ -25,12 +25,13 @@ Still ask Dave before you:
   - `read/<id>.md` (article text) and `read/<id>.pdf` (original PDF). Kept forever. Shown at `/<TOKEN>/read/<id>`.
   - `audio/<id>.vtt`: timed transcript (one cue for each sentence, from Edge TTS sentence boundaries). The feed links it with `<podcast:transcript>`, so Pocket Casts shows it live. It is deleted with the MP3.
   - `audio/<id>.mp3`: deleted after `RETENTION_DAYS` (90) by the cron. Lifecycle rule: 91 days. The item then gets `gone: true` and shows as "🍖 MEAT". Re-chomp reads `read/<id>.md` and makes the audio again.
-  - `parts/<id>.txt`: text of one part of a long article. Lifecycle rule: 31 days.
+  - `chunks/<id>/<run>/`: `plan.json` (text of each chunk), and `<n>.mp3` with `<n>.json` (length, sentence times) for each chunk. The join job deletes them. Lifecycle rule: 7 days.
+  - `parts/<id>.txt`: text of one part of an article that older code split into parts. Lifecycle rule: 31 days.
 - Email in: the Worker `email()` handler (`src/mail.ts` reads the MIME). Email Routing on the subdomain `podchast.dhoulb.com` sends `devour@` to the Worker. Only senders in the `EMAIL_FROM` secret are accepted. The address is the `EMAIL_TO` GitHub variable. PDFs (attachments and links) become text with Workers AI `toMarkdown`.
 - `/add` takes a `url`, or `content` (text or markdown) with an optional `title`. Text is kept in `read/<id>.md` (`item.text` is set).
-- Queue `podchast-jobs`: one job per episode. The consumer gets the article, does TTS and writes the MP3. Articles over 15,000 characters (`PART_CHARS`) become several episodes ("Part 1 of 3"), one job each.
+- Queue `podchast-jobs`, three kinds of job. Prepare (`{id}`): gets the article and plans 3,000-character chunks (`CHUNK_CHARS`). Chunk (`{id, run, chunk}`): speaks one chunk into R2. Join (`{id, run, join}`): queued by the last chunk; streams the chunks into one MP3 with chapters and the VTT. Every article is one episode. `run` names one try, so jobs from an older try do nothing. Chunk jobs do not save the item; the status page counts the chunk files.
 - Cron `17 3 * * *`: deletes old audio and marks those items `gone`.
-- TTS: Microsoft Edge "Read aloud" voices over a WebSocket (`src/edge-tts.ts`, `src/edge-drm.ts`). Edge only by default (`TTS_ENGINE=edge-only`): a failed job retries later, up to 5 attempts (`MAX_ATTEMPTS`, and `max_retries` 4 in `wrangler.jsonc`). Jobs run one at a time (`max_concurrency` 1), so big jobs do not hit the CPU limit together. Workers AI `@cf/deepgram/aura-2-en` is an optional fallback (`TTS_ENGINE=edge`, `src/tts.ts`).
+- TTS: Microsoft Edge "Read aloud" voices over a WebSocket (`src/edge-tts.ts`, `src/edge-drm.ts`). Edge only by default (`TTS_ENGINE=edge-only`): a failed job retries later, up to 5 attempts (`MAX_ATTEMPTS`, and `max_retries` 4 in `wrangler.jsonc`). Workers AI `@cf/deepgram/aura-2-en` is an optional fallback (`TTS_ENGINE=edge`, `src/tts.ts`).
 - Article extraction: HTMLRewriter heuristics (`src/extract.ts`).
 - Routes and queue handler: `src/index.ts`. Chapter tags: `src/id3.ts`. Cover art: `assets/cover.jpg` (1400x1400) and web app icons `assets/icon-*.png`, bundled as bytes. The feed links to the public `/cover-v5.jpg`. Change `COVER` in `src/index.ts` when the art changes, so podcast apps fetch it again.
 
@@ -66,8 +67,8 @@ Keep personal values (account ID, email addresses) out of the repo. Put them in 
 
 ## Limits to keep in mind
 
-- Free plan: 50 subrequests for each invocation. Edge TTS uses one subrequest for each 3,000-character part.
-- A queue consumer has 15 minutes of wall time. Edge parts run 4 at a time.
+- Free plan: 50 subrequests and very little CPU time for each invocation. Keep the work in each job small: a chunk job speaks one 3,000-character chunk, and the join streams R2 to R2 without touching the bytes.
+- A queue consumer has 15 minutes of wall time. Chunk jobs run 4 at a time (`max_concurrency`).
 - Some sites (BBC, The Atlantic) block Cloudflare. That is expected.
 
 ## Writing style

@@ -84,13 +84,14 @@ if (!email) await step(`Queue ${QUEUE}`, async () => {
 	return "made";
 });
 
-// 4. R2 lifecycle rules. Audio goes one day after the cron deletes it. Parts go after 31 days.
+// 4. R2 lifecycle rules. Audio goes one day after the cron deletes it. Parts go after 31 days. Chunks left by a failed try go after 7 days.
 if (!email) await step("R2 lifecycle rules", async () => {
 	const days = Number(process.env.RETENTION_DAYS || 90);
 	if (!(days > 0)) throw new Error(`RETENTION_DAYS is not a number: ${process.env.RETENTION_DAYS}`);
 	const want = [
 		["expire-audio", "audio/", days + 1],
 		["expire-parts", "parts/", 31],
+		["expire-chunks", "chunks/", 7],
 	].map(([id, prefix, d]) => ({
 		id,
 		enabled: true,
@@ -103,7 +104,7 @@ if (!email) await step("R2 lifecycle rules", async () => {
 	if (same) return "up to date";
 	const ids = new Set(want.map((w) => w.id));
 	await cf("PUT", `${acc}/r2/buckets/${BUCKET}/lifecycle`, { rules: [...rules.filter((r) => !ids.has(r.id)), ...want] });
-	return `set (audio ${days + 1} days, parts 31 days)`;
+	return `set (audio ${days + 1} days, parts 31 days, chunks 7 days)`;
 });
 
 // 5. Email Routing rule: EMAIL_TO → this Worker. Email Routing must already be on for the domain or subdomain.

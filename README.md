@@ -93,13 +93,13 @@ You can email or forward things to Podchast. A short email with a link adds that
 1. An iOS Shortcut sends the link to `POST /<TOKEN>/add`.
 2. The Worker saves an item in R2 and puts a job on the queue.
 3. The queue consumer gets the page and finds the article text (HTMLRewriter, no extra libraries).
-4. The consumer cuts the text into parts and sends each part to the TTS engine.
-5. The consumer joins the MP3 parts and writes one file to R2.
+4. The consumer cuts the text into chunks of 3,000 characters and puts one job for each chunk on the queue. Chunk jobs run 4 at a time. Each one speaks its chunk with the TTS engine and saves the MP3 in R2.
+5. When the last chunk is done, a join job streams the chunks into one MP3 in R2. The episode is published only then.
    Article headings become chapters (ID3 `CHAP` frames in the MP3).
    Each episode has a timed transcript (WebVTT, one line for each sentence). The feed links it with `<podcast:transcript>`, so Pocket Casts can show the words as they are spoken.
-   Articles longer than 15,000 characters (about 15 minutes) become several episodes: "Part 1 of 3", "Part 2 of 3" and so on. Each part is its own queue job.
+   Every article is one episode, however long it is. Each job does a small amount of work, so it stays under the Free plan CPU limit.
 6. `GET /<TOKEN>/noises.xml` shows the finished items as a podcast feed.
-7. If an article fails three times, the feed gets a short "🤮 SPAT OUT: …" episode. Its notes give the reason.
+7. If an article fails 5 times, the feed gets a short "🤮 SPAT OUT: …" episode. Its notes give the reason.
 8. The consumer keeps the article text in `read/<id>.md`, and the original PDF in `read/<id>.pdf`. These files stay forever. `GET /<TOKEN>/read/<id>` shows the text as a page.
 9. A daily cron deletes audio after 90 days. An R2 lifecycle rule (91 days) is the backup. The item stays on the status page as "🍖 MEAT", with a **Read** button. **Re-chomp** makes the audio again from the kept text.
 
@@ -159,5 +159,5 @@ curl -X POST --data-binary @fixture.html http://127.0.0.1:8799/
 ## Limits
 
 - The extractor is a simple heuristic. Most news sites and blogs work. Pages that need JavaScript or a login do not work.
-- On the Workers Free plan, one job can make 50 outbound requests. Long articles are split into episodes of about 15,000 characters, so there is no length limit.
+- On the Workers Free plan, one job can make 50 outbound requests. Each chunk is its own job, so there is no length limit.
 - Audio retention is set by `RETENTION_DAYS` (default 90) and the R2 lifecycle rule on `audio/`. Items and `read/` files have no lifecycle rule.

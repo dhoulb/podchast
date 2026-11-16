@@ -7,7 +7,8 @@ import { type Article, chunkText, fetchArticle } from "./extract";
 import { readMail } from "./mail";
 import { concat } from "./edge-tts";
 import { type Chapter, id3Tag } from "./id3";
-import { isPermanent, mp3Duration, speak, type TtsEnv } from "./tts";
+import { CHUNK_CHARS, chunkTimes, chunkVtt, isPermanent, mp3Duration, speak, speakChunk, type TtsEnv } from "./tts";
+import type { Cue } from "./edge-tts";
 
 export interface Env extends TtsEnv {
 	AUDIO: R2Bucket;
@@ -21,7 +22,10 @@ export interface Env extends TtsEnv {
 }
 
 // Debug jobs: "edge" and "workers-ai" speak `text` (or a test sentence) into debug/<id>.mp3. The voice, EDGE_FORMAT and EDGE_PAUSE_MS can be set for one job.
-type Job = { id: string; debug?: "edge" | "workers-ai" | "extract"; url?: string; force?: boolean; text?: string; format?: string; pause?: number; voice?: string; rate?: string; pitch?: string };
+// An item's audio is made in three steps. A job with only `id` reads the article and plans the chunks.
+// A job with `chunk` speaks one chunk. A job with `join` puts the chunks together into one episode.
+// `run` names one try of the whole item, so jobs from an older try do nothing.
+type Job = { id: string; run?: string; chunk?: number; join?: boolean; debug?: "edge" | "workers-ai" | "extract"; url?: string; force?: boolean; text?: string; format?: string; pause?: number; voice?: string; rate?: string; pitch?: string };
 
 type Status = "queued" | "processing" | "done" | "failed";
 type Item = {
@@ -52,6 +56,9 @@ type Item = {
 	transcript?: boolean; // A timed transcript is in audio/<id>.vtt. It is deleted with the audio.
 	attempt?: number; // The queue try that is running, or that ran last.
 	retryAt?: string; // When the queue tries again, after a failed try.
+	run?: string; // The current try. Its chunks are in chunks/<id>/<run>/.
+	chunks?: number; // How many chunks the current try speaks.
+	progress?: { done: number; last: number }; // Status page only, never saved: chunks done, and the time of the last one.
 };
 
 // Text for one episode, with the headings that become chapters.
@@ -71,10 +78,17 @@ const pdfKey = (id: string) => `read/${id}.pdf`;
 // Part 2 of an article shares the text of part 1.
 const rootId = (id: string) => id.replace(/-p\d+$/, "");
 
-// Articles longer than this are split into several episodes (about 15 minutes each).
-// Each part is its own queue job, so each part gets its own subrequest, time and CPU limits.
-// On the Free plan, parts of 30,000 characters or more were often stopped for too much CPU.
-const PART_CHARS = 15_000;
+// chunks/<id>/<run>/plan.json  The text of each chunk, and the headings.
+// chunks/<id>/<run>/<n>.mp3     The audio of chunk n. <n>.json has its length and sentence times.
+// The join job deletes them. A lifecycle rule deletes any that are left after 7 days.
+const chunkDir = (id: string, run: string) => `chunks/${id}/${run}/`;
+type Plan = { chunks: string[]; headings: string[]; again: boolean };
+type ChunkMeta = { seconds: number; bytes: number; cues?: Cue[]; engine: string; edgeError?: string };
+
+async function getJson<T>(env: Env, key: string): Promise<T | null> {
+	const obj = await env.AUDIO.get(key);
+	return obj ? ((await obj.json()) as T) : null;
+}
 // Biggest text /add takes (about 7 hours of audio).
 const MAX_TEXT = 400_000;
 const audioKey = (id: string) => `audio/${id}.mp3`;
@@ -366,6 +380,14 @@ function view(i: Item): View {
 	const stuck: View = { state: "stuck", step: "" };
 	if (i.status === "done") return i.gone ? { state: "meat", step: "" } : { state: "done", step: "" };
 	if (i.status === "failed") return { state: "failed", step: a ? gaveUp(a) : "Gave up." };
+	if (i.status === "processing" && i.chunks) {
+		// Chunk jobs do not save the item, so use the time of the newest chunk.
+		const quiet = Date.now() - (i.progress?.last ?? Date.parse(i.updated ?? i.created));
+		if (quiet > STUCK_MS) return stuck;
+		const done = i.progress?.done;
+		if (done === undefined) return { state: "chewing", step: `Speaking ${i.chunks} chunks` };
+		return { state: "chewing", step: done >= i.chunks ? `Joining ${i.chunks} chunks` : `Speaking · chunk ${done}/${i.chunks} done` };
+	}
 	if (i.status === "processing") {
 		if (age < RUN_MS) return { state: "chewing", step: `${a ? `Attempt ${n(a)}` : "Chewing"} · started ${mins(age)} ago` };
 		// The run is over, but it did not save a result: Cloudflare stopped it.
@@ -663,7 +685,7 @@ async function handleFetch(req: Request, env: Env): Promise<Response> {
 	if (url.pathname === `/${HERO}`) return new Response(hero, { headers: { "Content-Type": "image/jpeg", "Cache-Control": "public, max-age=31536000, immutable" } });
 	if (!parts.length || !safeEqual(parts[0], env.TOKEN)) return new Response("Not found", { status: 404 });
 	const [, a, b] = parts;
-	if (!a) return html(statusPage(env, url.origin, await listItems(env)));
+	if (!a) return html(statusPage(env, url.origin, await withProgress(env, await listItems(env))));
 	// noises.xml is the main feed URL. feed.xml still works for old subscriptions.
 	if (a === FEED || a === "feed.xml" || a === "feed")
 		return new Response(feedXml(env, url.origin, await listItems(env), a === "feed" ? "feed.xml" : a), {
@@ -699,7 +721,7 @@ async function handleFetch(req: Request, env: Env): Promise<Response> {
 		const bad = addProblem(add);
 		if (bad) return new Response(bad, { status: 400, headers: { "Content-Type": "text/plain; charset=utf-8" } });
 		const { same } = await addItem(env, add);
-		return html(statusPage(env, url.origin, await listItems(env), same ? `${same} ${add.target}` : `OM NOM NOM! In my mouth: ${add.content ? (add.title ?? "a big pile of text") : add.target} 😋 Chewing soon.`));
+		return html(statusPage(env, url.origin, await withProgress(env, await listItems(env)), same ? `${same} ${add.target}` : `OM NOM NOM! In my mouth: ${add.content ? (add.title ?? "a big pile of text") : add.target} 😋 Chewing soon.`));
 	}
 	if (a === "retry" && b) {
 		const item = await loadItem(env, b);
@@ -797,6 +819,33 @@ async function debugExtract(env: Env, id: string, url: string): Promise<void> {
 async function processJob(env: Env, job: Job, attempt: number): Promise<void> {
 	if (job.debug === "extract") return debugExtract(env, job.id, job.url ?? "");
 	if (job.debug) return debugJob(env, job);
+	if (job.chunk !== undefined) return chunkJob(env, job, attempt);
+	if (job.join) return joinJob(env, job, attempt);
+	return prepareJob(env, job, attempt);
+}
+
+/** Save a failed attempt on the item. On the last attempt the item fails. Returns true if the queue should try again. */
+async function attemptFailed(env: Env, item: Item, e: unknown, attempt: number, where = ""): Promise<boolean> {
+	const msg = String((e as Error)?.message ?? e);
+	console.error(`Job ${item.id}${where} attempt ${attempt} failed:`, msg);
+	item.error = where ? `${msg} (${where.trim()}, attempt ${attempt}/${MAX_ATTEMPTS})` : msg;
+	// Do not retry an error that a retry cannot fix.
+	const last = attempt >= MAX_ATTEMPTS || isPermanent(e);
+	if (last) {
+		item.status = "failed";
+		item.attempt = attempt;
+		item.retryAt = undefined;
+		await addFailureClip(env, item);
+	} else if (!where) {
+		item.status = "queued";
+		item.retryAt = new Date(Date.now() + retryDelay(attempt) * 1000).toISOString();
+	}
+	await saveItem(env, item);
+	return !last;
+}
+
+/** Step 1: read the article, plan the chunks, and queue one job for each chunk. */
+async function prepareJob(env: Env, job: Job, attempt: number): Promise<void> {
 	const item = await loadItem(env, job.id);
 	if (!item || (item.status === "done" && !job.force)) return;
 	// A run that Cloudflare stops (too much CPU) cannot save an error. The next attempt finds it still "processing".
@@ -805,64 +854,167 @@ async function processJob(env: Env, job: Job, attempt: number): Promise<void> {
 	item.status = "processing";
 	item.attempt = attempt;
 	item.retryAt = undefined;
-	// Part 1 of an article that older code split into bigger parts: split it again into smaller parts.
-	const big = item.part === 1 && ((await env.AUDIO.head(partKey(item.id)))?.size ?? 0) > PART_CHARS * 1.5;
-	// Re-chomp of 🍖 MEAT or of a done episode: read the kept text again, and split it again if it is long.
-	const again = ((item.gone || !!job.force) && (item.part ?? 1) === 1) || big;
-	if (again) {
+	item.run = undefined;
+	item.chunks = undefined;
+	// Part 1 of an article that older code split into parts is now made as one whole episode.
+	if (item.part === 1) {
 		item.part = undefined;
 		item.parts = undefined;
 	}
+	// Re-chomp of 🍖 MEAT or of a done episode: read the kept text again. It gets a new date.
+	const again = !!(item.gone || job.force);
 	await saveItem(env, item);
 	try {
-		const { text, headings } = item.part ? await partText(env, item) : await firstPart(env, item, again);
+		// Older items: a part 2 or later keeps its own text in parts/.
+		const { text, headings } = item.part ? await partText(env, item) : await loadArticle(env, item);
 		const partNote = item.parts ? ` Part ${item.part} of ${item.parts}.` : "";
 		const intro = [item.title?.replace(/[.!?]?$/, "."), item.byline && `By ${item.byline}.`, item.site && `From ${item.site}.`].filter(Boolean).join(" ") + partNote;
 		const outro = item.parts && item.part !== item.parts ? `End of part ${item.part}. Part ${(item.part ?? 1) + 1} follows.` : "End of article.";
 		const script = `${intro}\n\n${text}\n\n${outro}`;
 		item.chars = script.length;
 		item.words = text.split(/\s+/).filter(Boolean).length;
-		const { pieces, seconds: exact, engine, edgeError, marks, vtt } = await speak(env, script);
-		const seconds = Math.round(exact);
+		const chunks = chunkText(script, CHUNK_CHARS);
+		const run = crypto.randomUUID().slice(0, 8);
+		const plan: Plan = { chunks, headings, again };
+		await env.AUDIO.put(`${chunkDir(item.id, run)}plan.json`, JSON.stringify(plan), { httpMetadata: { contentType: "application/json" } });
+		item.run = run;
+		item.chunks = chunks.length;
+		item.attempt = undefined;
+		await saveItem(env, item);
+		// A queue batch takes at most 100 messages.
+		for (let i = 0; i < chunks.length; i += 100) {
+			await env.JOBS.sendBatch(chunks.slice(i, i + 100).map((_, k) => ({ body: { id: item.id, run, chunk: i + k } })));
+		}
+	} catch (e) {
+		if (await attemptFailed(env, item, e, attempt)) throw e;
+	}
+}
+
+/** Step 2: speak one chunk. The last chunk to finish queues the join. */
+async function chunkJob(env: Env, job: Job, attempt: number): Promise<void> {
+	const n = job.chunk!;
+	const item = await loadItem(env, job.id);
+	// An older try, a failed item or a deleted item: nothing to do.
+	if (!item || item.status !== "processing" || item.run !== job.run || !job.run) return;
+	const dir = chunkDir(item.id, job.run);
+	const plan = await getJson<Plan>(env, `${dir}plan.json`);
+	if (!plan) return;
+	try {
+		const r = await speakChunk(env, plan.chunks[n]);
+		await env.AUDIO.put(`${dir}${n}.mp3`, r.mp3, { httpMetadata: { contentType: "audio/mpeg" } });
+		const meta: ChunkMeta = { seconds: r.seconds, bytes: r.mp3.length, cues: r.cues, engine: r.engine, edgeError: r.edgeError };
+		await env.AUDIO.put(`${dir}${n}.json`, JSON.stringify(meta), { httpMetadata: { contentType: "application/json" } });
+		console.log(`Chunk ${n + 1}/${plan.chunks.length} of ${item.id}: ${r.mp3.length} bytes, ${Math.round(r.seconds)} s`);
+	} catch (e) {
+		// Load the item again: other chunks may have changed it.
+		const fresh = await loadItem(env, job.id);
+		if (!fresh || fresh.run !== job.run || fresh.status !== "processing") return;
+		if (await attemptFailed(env, fresh, e, attempt, ` chunk ${n + 1}/${plan.chunks.length}`)) throw e;
+		return;
+	}
+	if ((await countChunks(env, dir)) >= plan.chunks.length) await env.JOBS.send({ id: item.id, run: job.run, join: true });
+}
+
+/** How many chunks in a try are done. */
+async function countChunks(env: Env, dir: string): Promise<number> {
+	let done = 0;
+	let cursor: string | undefined;
+	do {
+		const page = await env.AUDIO.list({ prefix: dir, cursor, limit: 1000 });
+		done += page.objects.filter((o) => /\/\d+\.json$/.test(o.key)).length;
+		cursor = page.truncated ? page.cursor : undefined;
+	} while (cursor);
+	return done;
+}
+
+/** Step 3: put the chunks together into one MP3 with chapters and a transcript. The audio is streamed from R2 to R2, so it uses little CPU. */
+async function joinJob(env: Env, job: Job, attempt: number): Promise<void> {
+	const item = await loadItem(env, job.id);
+	if (!item || item.status !== "processing" || item.run !== job.run || !job.run) return;
+	const dir = chunkDir(item.id, job.run);
+	try {
+		const plan = await getJson<Plan>(env, `${dir}plan.json`);
+		if (!plan) throw new Error("Podchast: the chunk plan is missing");
+		const metas = await Promise.all(plan.chunks.map((_, i) => getJson<ChunkMeta>(env, `${dir}${i}.json`)));
+		const missing = metas.findIndex((m) => !m);
+		if (missing >= 0) throw new Error(`Podchast: chunk ${missing + 1}/${plan.chunks.length} is missing`);
+		const ms = metas as ChunkMeta[];
+		const lens = ms.map((m) => m.seconds);
+		const seconds = Math.round(lens.reduce((a, b) => a + b, 0));
 		// Chapters: the article start, then one for each heading.
+		const marks = chunkTimes(plan.chunks, lens);
 		const chapters: Chapter[] = [{ title: item.title ?? "Start", start: 0 }];
-		for (const h of headings) {
+		for (const h of plan.headings) {
 			const start = marks(h);
 			if (start !== undefined && start > chapters[chapters.length - 1].start + 1) chapters.push({ title: h.replace(/\.$/, ""), start });
 		}
-		const audio = concat([id3Tag(item.title ?? "Podchast", chapters, seconds), ...pieces]);
-		await env.AUDIO.put(audioKey(item.id), audio, { httpMetadata: { contentType: "audio/mpeg" } });
-		await env.AUDIO.put(transcriptKey(item.id), vtt, { httpMetadata: { contentType: "text/vtt; charset=utf-8" } });
+		const tag = id3Tag(item.title ?? "Podchast", chapters, seconds);
+		const bytes = tag.length + ms.reduce((n, m) => n + m.bytes, 0);
+		// One stream: the tag, then each chunk in order. R2 needs the length first.
+		const { readable, writable } = new FixedLengthStream(bytes);
+		const pump = (async () => {
+			const w = writable.getWriter();
+			await w.write(tag);
+			w.releaseLock();
+			for (let i = 0; i < ms.length; i++) {
+				const obj = await env.AUDIO.get(`${dir}${i}.mp3`);
+				if (!obj) throw new Error(`Podchast: audio for chunk ${i + 1}/${ms.length} is missing`);
+				await obj.body.pipeTo(writable, { preventClose: true });
+			}
+			await writable.close();
+		})();
+		await Promise.all([env.AUDIO.put(audioKey(item.id), readable, { httpMetadata: { contentType: "audio/mpeg" } }), pump]);
+		await env.AUDIO.put(transcriptKey(item.id), chunkVtt(plan.chunks, lens, ms.map((m) => m.cues)), { httpMetadata: { contentType: "text/vtt; charset=utf-8" } });
+		const engines = new Set(ms.map((m) => m.engine));
+		const edgeError = ms.find((m) => m.edgeError)?.edgeError;
 		item.transcript = true;
-		item.bytes = audio.length;
+		item.bytes = bytes;
 		item.duration = seconds;
 		item.chapters = chapters.length >= 2 ? chapters.length : undefined;
-		item.engine = engine;
+		item.engine = [...engines].join("+");
 		item.error = edgeError ? `Edge TTS failed, used Workers AI: ${edgeError}` : undefined;
 		item.status = "done";
 		item.attempt = undefined;
-		if (item.gone || again) {
+		item.retryAt = undefined;
+		item.chunks = undefined;
+		if (item.gone || plan.again) {
 			item.gone = undefined;
 			item.aired = new Date().toISOString();
 		}
 		await saveItem(env, item);
 		if (item.parts || item.text) await env.AUDIO.delete(partKey(item.id));
+		await deletePrefix(env, `chunks/${item.id}/`);
 	} catch (e) {
-		const msg = String((e as Error)?.message ?? e);
-		console.error(`Job ${item.id} attempt ${attempt} failed:`, msg);
-		item.error = msg;
-		// Do not retry an error that a retry cannot fix. Each retry runs Edge TTS again.
-		const last = attempt >= MAX_ATTEMPTS || isPermanent(e);
-		item.status = last ? "failed" : "queued";
-		if (!last) item.retryAt = new Date(Date.now() + retryDelay(attempt) * 1000).toISOString();
-		if (last) await addFailureClip(env, item);
-		await saveItem(env, item);
-		if (!last) throw e;
+		if (await attemptFailed(env, item, e, attempt, " join")) throw e;
 	}
 }
 
-/** Fetch the article for a new item. If it is long, queue parts 2..n as their own items and return the text for part 1. */
-async function firstPart(env: Env, item: Item, again = false): Promise<PartText> {
+async function deletePrefix(env: Env, prefix: string): Promise<void> {
+	let cursor: string | undefined;
+	do {
+		const page = await env.AUDIO.list({ prefix, cursor, limit: 1000 });
+		if (page.objects.length) await env.AUDIO.delete(page.objects.map((o) => o.key));
+		cursor = page.truncated ? page.cursor : undefined;
+	} while (cursor);
+}
+
+/** Chunks done for each item that is being spoken, for the status page. */
+async function withProgress(env: Env, items: Item[]): Promise<Item[]> {
+	await Promise.all(
+		items
+			.filter((i) => i.status === "processing" && i.run)
+			.map(async (i) => {
+				const page = await env.AUDIO.list({ prefix: chunkDir(i.id, i.run!), limit: 1000 });
+				const done = page.objects.filter((o) => /\/\d+\.json$/.test(o.key)).length;
+				const last = Math.max(Date.parse(i.updated ?? i.created), ...page.objects.map((o) => o.uploaded.getTime()));
+				i.progress = { done, last };
+			}),
+	);
+	return items;
+}
+
+/** Fetch the article (or read the kept text) and fill in the item's details. The whole article becomes one episode. */
+async function loadArticle(env: Env, item: Item): Promise<PartText> {
 	// Text we already keep is read from R2. A web page is only fetched the first time, so a re-chomp reads the copy we saved.
 	let pdf: ArrayBuffer | undefined;
 	const kept = item.text || item.saved;
@@ -886,31 +1038,7 @@ async function firstPart(env: Env, item: Item, again = false): Promise<PartText>
 	item.excerpt = art.excerpt ?? item.excerpt ?? art.text.slice(0, 300);
 	const image = art.image ?? item.image;
 	item.image = image && image.length <= 400 ? image : undefined;
-	const headings = art.headings ?? [];
-	const n = Math.ceil(art.text.length / PART_CHARS);
-	if (n <= 1) return { text: art.text, headings };
-	// Balanced parts, split at paragraph or sentence breaks.
-	const chunks = chunkText(art.text, Math.ceil((art.text.length / n) * 1.05));
-	const parts = chunks.length;
-	// Later parts get later dates. A re-chomp starts from now, so the parts are new in the feed.
-	const created = again ? Date.now() : Date.parse(item.created);
-	const partOf = (t: string): PartText => ({ text: t, headings: headings.filter((h) => t.includes(h)) });
-	for (let i = 1; i < parts; i++) {
-		// Later parts get later dates, so podcast apps list them in order.
-		const at = new Date(created + i * 1000).toISOString();
-		const p: Item = { ...item, id: `${item.id}-p${i + 1}`, part: i + 1, parts, status: "queued", created: again ? ((await loadItem(env, `${item.id}-p${i + 1}`))?.created ?? at) : at, pdf: undefined, attempt: undefined, retryAt: undefined, error: undefined, bytes: undefined, duration: undefined, chapters: undefined, engine: undefined, transcript: undefined, gone: undefined };
-		if (again) p.aired = at;
-		p.title = `${art.title} (Part ${i + 1} of ${parts})`;
-		await env.AUDIO.put(partKey(p.id), JSON.stringify(partOf(chunks[i])));
-		await saveItem(env, p);
-		await env.JOBS.send({ id: p.id });
-	}
-	item.part = 1;
-	item.parts = parts;
-	// Keep part 1's text too, so a retry does not split the article again.
-	await env.AUDIO.put(partKey(item.id), JSON.stringify(partOf(chunks[0])));
-	item.title = `${art.title} (Part 1 of ${parts})`;
-	return partOf(chunks[0]);
+	return { text: art.text, headings: art.headings ?? [] };
 }
 
 /** Turn a PDF into markdown with Workers AI (free for PDFs). Page headings are dropped, so they do not become chapters. */
