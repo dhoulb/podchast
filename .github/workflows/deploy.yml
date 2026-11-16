@@ -46,14 +46,23 @@ jobs:
         run: |
           args=()
           for name in FEED_TITLE RETENTION_DAYS VOICE RATE PITCH EDGE_FORMAT TTS_ENGINE AI_MODEL AI_SPEAKER SHORTCUT_URL EMAIL_TO; do
-            value=$(jq -r --arg n "$name" '.[$n] // empty' <<< "$(jq -s '.[1] + .[0]' <<< "$VARS $SECRETS")")
+            value="${!name}"
             [ -n "$value" ] && args+=(--var "$name:$value")
           done
           npx wrangler deploy "${args[@]}"
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_KEY }}
-          VARS: ${{ toJSON(vars) }}
-          SECRETS: ${{ toJSON(secrets) }}
+          FEED_TITLE: ${{ vars.FEED_TITLE || secrets.FEED_TITLE }}
+          RETENTION_DAYS: ${{ vars.RETENTION_DAYS || secrets.RETENTION_DAYS }}
+          VOICE: ${{ vars.VOICE || secrets.VOICE }}
+          RATE: ${{ vars.RATE || secrets.RATE }}
+          PITCH: ${{ vars.PITCH || secrets.PITCH }}
+          EDGE_FORMAT: ${{ vars.EDGE_FORMAT || secrets.EDGE_FORMAT }}
+          TTS_ENGINE: ${{ vars.TTS_ENGINE || secrets.TTS_ENGINE }}
+          AI_MODEL: ${{ vars.AI_MODEL || secrets.AI_MODEL }}
+          AI_SPEAKER: ${{ vars.AI_SPEAKER || secrets.AI_SPEAKER }}
+          SHORTCUT_URL: ${{ vars.SHORTCUT_URL || secrets.SHORTCUT_URL }}
+          EMAIL_TO: ${{ vars.EMAIL_TO || secrets.EMAIL_TO }}
       # Copy secrets to the Worker. A secret that is not set in GitHub is left as it is on the Worker.
       - name: Set Worker secrets
         run: |
