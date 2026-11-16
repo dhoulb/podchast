@@ -31,7 +31,7 @@ Still ask Dave before you:
 
 - Worker: `https://podchast.dhoulb.workers.dev`
 - Private routes start with `/<TOKEN>/`: status page, `feed.xml`, `add`, `audio/<id>.mp3`, `retry/<id>`.
-- `TOKEN` is a Worker secret. Never write it into the repo, commits, PRs or logs.
+- `TOKEN` is a Worker secret. Its source is the `TOKEN` GitHub Actions secret; each deploy copies it to Cloudflare. Never write it into the repo, commits, PRs or logs.
 
 ## Commands
 
@@ -47,7 +47,7 @@ When you change `src/extract.ts`, run the harness on all `test/fixture*.html` fi
 
 ## Deploy
 
-`.github/workflows/deploy.yml` runs `wrangler deploy` on every push to `main`, with the repository secret `CLOUDFLARE_API_KEY`. Do not deploy by hand.
+`.github/workflows/deploy.yml` runs `wrangler deploy` on every push to `main`, with the repository secret `CLOUDFLARE_API_KEY`. It then copies the `TOKEN` repository secret to the Worker. Do not deploy by hand.
 
 ## Limits to keep in mind
 
