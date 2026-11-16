@@ -2,7 +2,7 @@ import cover from "../assets/cover.jpg";
 import icon180 from "../assets/icon-180.png";
 import icon192 from "../assets/icon-192.png";
 import icon512 from "../assets/icon-512.png";
-import { chunkText, fetchArticle } from "./extract";
+import { type Article, chunkText, fetchArticle } from "./extract";
 import { concat } from "./edge-tts";
 import { type Chapter, id3Tag } from "./id3";
 import { mp3Duration, speak, type TtsEnv } from "./tts";
@@ -39,6 +39,7 @@ type Item = {
 	words?: number;
 	image?: string; // Article image (og:image), used as episode art.
 	chapters?: number;
+	text?: boolean; // Made from text sent to /add, not from a web page. The text is in parts/<id>.txt.
 };
 
 // Text for one episode, with the headings that become chapters.
@@ -56,6 +57,8 @@ const partKey = (id: string) => `parts/${id}.txt`;
 // Articles longer than this are split into several episodes (about 40 minutes each).
 // Each part is its own queue job, so each part gets its own subrequest and time limits.
 const PART_CHARS = 40_000;
+// Biggest text /add takes (about 7 hours of audio).
+const MAX_TEXT = 400_000;
 const audioKey = (id: string) => `audio/${id}.mp3`;
 
 async function saveItem(env: Env, item: Item): Promise<void> {
@@ -122,29 +125,50 @@ function findUrl(s: string): string | null {
 	}
 }
 
-async function readAddRequest(req: Request, url: URL): Promise<{ token: string; target: string | null }> {
+type AddRequest = { token: string; target: string | null; content?: string; title?: string };
+
+async function readAddRequest(req: Request, url: URL): Promise<AddRequest> {
 	let token = req.headers.get("authorization")?.replace(/^Bearer\s+/i, "") || req.headers.get("x-token") || url.searchParams.get("token") || "";
 	// Android's share target sends the link as url, text or title.
 	let raw = url.searchParams.get("url") || url.searchParams.get("text") || url.searchParams.get("title") || "";
+	// Text to read aloud instead of a web page. With content, url is only the source link.
+	let content = "";
+	let title = "";
 	if (req.method === "POST") {
 		const type = req.headers.get("content-type") ?? "";
 		if (type.includes("application/json")) {
 			const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
-			raw = String(body.url ?? body.text ?? body.input ?? raw);
-			token ||= String(body.token ?? "");
+			content = str(body.content);
+			title = str(body.title);
+			raw = content ? str(body.url) : String(body.url ?? body.text ?? body.input ?? raw);
+			token ||= str(body.token);
 		} else if (type.includes("form")) {
 			const form = await req.formData();
+			content = str(form.get("content"));
+			title = str(form.get("title"));
 			raw = String(form.get("url") ?? raw);
-			token ||= String(form.get("token") ?? "");
+			token ||= str(form.get("token"));
 		} else {
-			raw = (await req.text()) || raw;
+			const body = await req.text();
+			// A plain-text body is a link, unless it has no link and is long enough to be the text itself.
+			if (body && !findUrl(body) && body.trim().length > 200) content = body;
+			else raw = body || raw;
 		}
 	}
-	return { token, target: findUrl(raw) };
+	content = content.trim();
+	return { token, target: findUrl(raw), content: content || undefined, title: title.trim().slice(0, 300) || undefined };
 }
 
-async function addUrl(env: Env, target: string): Promise<Item> {
-	const item: Item = { id: newId(), url: target, status: "queued", created: new Date().toISOString() };
+const str = (v: unknown) => (typeof v === "string" ? v : "");
+
+async function addItem(env: Env, add: AddRequest): Promise<Item> {
+	const item: Item = { id: newId(), url: add.target ?? "", status: "queued", created: new Date().toISOString() };
+	if (add.content) {
+		// Keep the text in R2 until the job reads it. Long text is split into parts there.
+		item.text = true;
+		item.title = add.title;
+		await env.AUDIO.put(partKey(item.id), add.content);
+	}
 	await saveItem(env, item);
 	await env.JOBS.send({ id: item.id });
 	return item;
@@ -188,24 +212,24 @@ function feedXml(env: Env, origin: string, items: Item[]): string {
 		.filter((i) => i.status === "done" || i.status === "failed")
 		.map((i) => {
 			const failed = i.status === "failed";
-			const article = i.title ?? i.url;
+			const article = i.title ?? (i.url || "Some text");
 			const name = failed ? `🤮 SPAT OUT: ${article}` : i.site ? `${i.title} (${i.site})` : article;
 			const facts = failed
 				? []
 				: [i.words && `${i.words.toLocaleString("en-GB")} words`, i.duration && `${Math.round(i.duration / 60)} min`, i.chapters && `${i.chapters} chapters`].filter(Boolean);
 			const notes = failed
-				? [`<p>BLEURGH. I CHOMPED this article and it tasted like RUSTY NAILS. I SPAT IT OUT. 🤮</p>`, `<p>What got stuck in my teeth: ${esc(i.error ?? "a mystery bone")}</p>`, `<p><a href="${esc(i.url)}">Look at the thing I could not eat</a></p>`, `<p>Share the link again to retry.</p>`]
+				? [`<p>BLEURGH. I CHOMPED this article and it tasted like RUSTY NAILS. I SPAT IT OUT. 🤮</p>`, `<p>What got stuck in my teeth: ${esc(i.error ?? "a mystery bone")}</p>`, i.url && `<p><a href="${esc(i.url)}">Look at the thing I could not eat</a></p>`, `<p>Feed it to me again to retry.</p>`].filter(Boolean)
 				: [
 						i.excerpt && `<p>${esc(i.excerpt)}</p>`,
 						i.byline && `<p>By ${esc(i.byline)}.</p>`,
-						`<p><a href="${esc(i.url)}">Read the article</a>${i.site ? ` on ${esc(i.site)}` : ""}</p>`,
+						i.url && `<p><a href="${esc(i.url)}">Read the article</a>${i.site ? ` on ${esc(i.site)}` : ""}</p>`,
 						facts.length && `<p>${esc(facts.join(" · "))}</p>`,
 					].filter(Boolean);
-			const plain = failed ? `BLEURGH! I could not eat this article. Stuck in my teeth: ${i.error ?? "a mystery bone"}. ${i.url}` : [i.excerpt, i.byline && `By ${i.byline}.`, `Source: ${i.url}`, facts.join(" · ")].filter(Boolean).join("\n\n");
+			const plain = failed ? `BLEURGH! I could not eat this article. Stuck in my teeth: ${i.error ?? "a mystery bone"}. ${i.url}`.trim() : [i.excerpt, i.byline && `By ${i.byline}.`, i.url && `Source: ${i.url}`, facts.join(" · ")].filter(Boolean).join("\n\n");
 			const audio = failed ? `${base}/audio/${FAILED_ID}.mp3?for=${i.id}` : `${base}/audio/${i.id}.mp3`;
 			return `<item>
 <title>${esc(name)}</title>
-<link>${esc(i.url)}</link>
+<link>${esc(i.url || base)}</link>
 <guid isPermaLink="false">${esc(i.id)}</guid>
 <pubDate>${new Date(i.created).toUTCString()}</pubDate>
 <description>${esc(plain)}</description>
@@ -247,10 +271,10 @@ function statusPage(env: Env, origin: string, items: Item[], note = ""): string 
 			const meta = [i.duration && hms(i.duration), i.words && `${i.words.toLocaleString("en-GB")} words`, i.chapters && `${i.chapters} chapters`, i.site, new Date(i.created).toLocaleDateString("en-GB", { day: "numeric", month: "short" })].filter(Boolean);
 			return `<li class="card">
 <div class="row"><span class="pill ${i.status}">${STATUS_LABEL[i.status]}</span><span class="meta">${esc(meta.join(" · "))}</span></div>
-<h3>${esc(i.title ?? i.url)}</h3>
+<h3>${esc(i.title ?? (i.url || "Some text"))}</h3>
 ${i.error ? `<p class="err">${esc(i.error)}</p>` : ""}
-<div class="row actions"><a href="${esc(i.url)}">Raw meat</a>${i.status === "done" ? `<a href="${esc(`${base}/audio/${i.id}.mp3`)}">Listen to the burp</a>` : ""}${i.status === "failed" ? `<form method="post" action="${esc(`${base}/retry/${i.id}`)}"><button class="link">Re-chomp</button></form>` : ""}
-<form method="post" action="${esc(`${base}/delete/${i.id}`)}" onsubmit="return confirm('EAT THIS ONE AGAIN? Forever? No take-backs?? OM NOM?')"><button class="link danger">Eat it again</button></form></div>
+<div class="row actions">${i.url ? `<a href="${esc(i.url)}">Source</a>` : ""}${i.status === "done" ? `<a href="${esc(`${base}/audio/${i.id}.mp3`)}">Play</a>` : ""}${i.status === "failed" ? `<form method="post" action="${esc(`${base}/retry/${i.id}`)}"><button class="link">Re-chomp</button></form>` : ""}
+<form method="post" action="${esc(`${base}/delete/${i.id}`)}" onsubmit="return confirm('DELETE this one? Forever? No take-backs??')"><button class="link danger">Delete</button></form></div>
 </li>`;
 		})
 		.join("");
@@ -285,7 +309,7 @@ input[type=url]{width:100%;padding:12px;font:inherit;border:3px solid var(--iron
 .btn,button.btn{display:inline-block;padding:10px 18px;font-size:17px;font-weight:700;color:#fff;background:var(--teal-d);border:3px solid var(--ink);border-radius:12px;box-shadow:0 4px 0 var(--ink);text-decoration:none;cursor:pointer}
 .btn:active{transform:translateY(3px);box-shadow:0 1px 0 var(--ink)}
 .btn.gold{background:var(--gold);color:var(--ink)}
-form.add{display:flex;gap:8px;flex-wrap:wrap}form.add input{flex:1 1 260px}
+form.add{display:flex;gap:8px;flex-wrap:wrap}form.add input{flex:1 1 260px}form.add details{flex:1 1 100%}form.add summary{cursor:pointer;font-weight:700;padding:4px 0}form.add details input,form.add textarea{display:block;width:100%;margin:8px 0;padding:12px;font:inherit;border:3px solid var(--iron);border-radius:12px;background:#fffaf0;color:inherit}
 code{display:block;word-break:break-all;background:#fffaf0;border:2px dashed var(--parch-d);border-radius:8px;padding:8px;font-size:13px}
 ul{list-style:none;padding:0;margin:0;display:grid;gap:12px}
 .card{padding:12px 14px}
@@ -305,13 +329,14 @@ button.danger{color:var(--red)}
 .tab .panel:first-child{margin-top:0}
 .steps{display:block;padding-left:18px;list-style:disc}.steps li{margin:4px 0}
 code.inline{display:inline;padding:1px 4px;border-style:solid}
-@media (prefers-color-scheme:dark){html{background:#04222c}:root{--parch:#2a2f3a;--parch-d:#444b59;--ink:#f3ead6;--wood:#e8cf9f;--teal-dd:#5fd8e6}body{background:radial-gradient(circle at 50% 0,#0b6f86 0,#06485a 45%,#04222c 100%) fixed}input[type=url],code{background:#1d222b;color:var(--ink)}.pill{color:#20293c}.pill.done,.pill.processing,.pill.failed{color:#fff}.btn,button.btn{border-color:#20293c;box-shadow:0 4px 0 #000}.btn.gold{color:#20293c}h1{-webkit-text-stroke-color:#20293c;text-shadow:0 4px 0 #000}.note{color:#20293c}}
+@media (prefers-color-scheme:dark){html{background:#04222c}:root{--parch:#2a2f3a;--parch-d:#444b59;--ink:#f3ead6;--wood:#e8cf9f;--teal-dd:#5fd8e6}body{background:radial-gradient(circle at 50% 0,#0b6f86 0,#06485a 45%,#04222c 100%) fixed}input[type=url],input[type=text],textarea,code{background:#1d222b !important;color:var(--ink)}.pill{color:#20293c}.pill.done,.pill.processing,.pill.failed{color:#fff}.btn,button.btn{border-color:#20293c;box-shadow:0 4px 0 #000}.btn.gold{color:#20293c}h1{-webkit-text-stroke-color:#20293c;text-shadow:0 4px 0 #000}.note{color:#20293c}}
 </style></head><body><main>
 <header><img src="${esc(base)}/icon-192.png" alt=""><div><h1>${esc(title)}</h1><p id="growl">ARTICLES IN. NOISES OUT. EVERYTHING EATEN AGAIN IN ${Number(env.RETENTION_DAYS) || 30} DAYS. OM NOM.</p></div></header>
 <nav class="tabs" role="tablist"><a href="#articles" role="tab">Articles</a><a href="#feed" role="tab">XML feed</a><a href="#share" role="tab">Share sheet</a></nav>
 <section id="articles" class="tab">
 ${note ? `<div class="panel note">${esc(note)}</div>` : ""}
-<div class="panel"><h2>FEED ME. FEED ME NOW. 🍖</h2><form class="add" method="post" action="${esc(base)}/add"><input type="url" name="url" placeholder="PUT A LINK IN MY MOUTH" required><button class="btn gold">NOM IT</button></form></div>
+<div class="panel"><h2>FEED ME. FEED ME NOW. 🍖</h2><form class="add" method="post" action="${esc(base)}/add"><input type="url" name="url" placeholder="PUT A LINK IN MY MOUTH"><button class="btn gold">INGEST</button>
+<details><summary>…or VOM A PILE OF TEXT AT ME 🤢</summary><input type="text" name="title" placeholder="Title (optional, I will guess)"><textarea name="content" rows="8" placeholder="Paste words. Markdown is fine. # Headings become chapters. I EAT IT ALL."></textarea><button class="btn gold">INGEST</button></details></form></div>
 <ul>${rows || `<li class="card empty">MY BELLY IS EMPTY. I AM SO HUNGRY. I could eat a WHOLE NEWSLETTER. I could eat a TERMS OF SERVICE. Share me an article before I eat the CSS. 🫥</li>`}</ul>
 </section>
 <section id="feed" class="tab">
@@ -362,9 +387,9 @@ async function handleFetch(req: Request, env: Env): Promise<Response> {
 
 	// POST /add (token in header, query or body) — used by the iOS Shortcut.
 	if (parts[0] === "add" && parts.length === 1) {
-		const { token, target } = await readAddRequest(req, url);
-		if (!safeEqual(token, env.TOKEN)) return reply(req, 401, "GRRRR. WRONG TOKEN. You are NOT my keeper. I bite strangers. 🦷");
-		return queueReply(req, env, target);
+		const add = await readAddRequest(req, url);
+		if (!safeEqual(add.token, env.TOKEN)) return reply(req, 401, "GRRRR. WRONG TOKEN. You are NOT my keeper. I bite strangers. 🦷");
+		return queueReply(req, env, add);
 	}
 
 	// Everything else lives under /<token>/...
@@ -388,12 +413,13 @@ async function handleFetch(req: Request, env: Env): Promise<Response> {
 		return Response.redirect(`${url.origin}/${env.TOKEN}`, 303);
 	}
 	if (a === "add") {
-		const { target } = await readAddRequest(req, url);
+		const add = await readAddRequest(req, url);
 		// The status page form posts here from a browser. Shortcuts and scripts get a short text reply.
-		if (!wantsHtml(req)) return queueReply(req, env, target);
-		if (!target) return new Response("NO LINK?! You tried to feed me AIR. I cannot eat AIR. 😤", { status: 400 });
-		await addUrl(env, target);
-		return html(statusPage(env, url.origin, await listItems(env), `OM NOM NOM! In my mouth: ${target} 😋 Chewing soon.`));
+		if (!wantsHtml(req)) return queueReply(req, env, add);
+		const bad = addProblem(add);
+		if (bad) return new Response(bad, { status: 400, headers: { "Content-Type": "text/plain; charset=utf-8" } });
+		await addItem(env, add);
+		return html(statusPage(env, url.origin, await listItems(env), `OM NOM NOM! In my mouth: ${add.content ? (add.title ?? "a big pile of text") : add.target} 😋 Chewing soon.`));
 	}
 	if (a === "retry" && b) {
 		const item = await loadItem(env, b);
@@ -416,10 +442,17 @@ function reply(req: Request, status: number, message: string, extra: Record<stri
 	return new Response(message, { status, headers: { "Content-Type": "text/plain; charset=utf-8" } });
 }
 
-async function queueReply(req: Request, env: Env, target: string | null): Promise<Response> {
-	if (!target) return reply(req, 400, "BLEH. NO LINK. You fed me an EMPTY SPOON. Share a web page or copy a link, then try AGAIN. I am STARVING. 😤");
-	const item = await addUrl(env, target);
-	return reply(req, 200, `OM NOM NOM! SWALLOWED: ${target} 😋🦷 Burping it into your feed soon.`, { id: item.id });
+function addProblem(add: AddRequest): string | undefined {
+	if (add.content && add.content.length > MAX_TEXT) return `TOO MUCH. ${add.content.length.toLocaleString("en-GB")} characters?! Even I have limits. Max ${MAX_TEXT.toLocaleString("en-GB")}. 🤢`;
+	if (!add.content && !add.target) return "BLEH. NO LINK. NO TEXT. You fed me an EMPTY SPOON. Send a link or some content, then try AGAIN. I am STARVING. 😤";
+}
+
+async function queueReply(req: Request, env: Env, add: AddRequest): Promise<Response> {
+	const bad = addProblem(add);
+	if (bad) return reply(req, 400, bad);
+	const item = await addItem(env, add);
+	const what = add.content ? `${add.title ?? "a big pile of text"} (${add.content.length.toLocaleString("en-GB")} characters)` : add.target;
+	return reply(req, 200, `OM NOM NOM! SWALLOWED: ${what} 😋🦷 Burping it into your feed soon.`, { id: item.id });
 }
 
 const html = (body: string) => new Response(body, { headers: { "Content-Type": "text/html; charset=utf-8" } });
@@ -499,7 +532,7 @@ async function processJob(env: Env, job: Job, attempt: number): Promise<void> {
 		item.error = edgeError ? `Edge TTS failed, used Workers AI: ${edgeError}` : undefined;
 		item.status = "done";
 		await saveItem(env, item);
-		if (item.parts) await env.AUDIO.delete(partKey(item.id));
+		if (item.parts || item.text) await env.AUDIO.delete(partKey(item.id));
 	} catch (e) {
 		const msg = String((e as Error)?.message ?? e);
 		console.error(`Job ${item.id} attempt ${attempt} failed:`, msg);
@@ -513,7 +546,7 @@ async function processJob(env: Env, job: Job, attempt: number): Promise<void> {
 
 /** Fetch the article for a new item. If it is long, queue parts 2..n as their own items and return the text for part 1. */
 async function firstPart(env: Env, item: Item): Promise<PartText> {
-	const art = await fetchArticle(item.url);
+	const art = item.text ? await textArticle(env, item) : await fetchArticle(item.url);
 	item.title = art.title;
 	item.byline = art.byline;
 	item.site = art.site;
@@ -541,6 +574,79 @@ async function firstPart(env: Env, item: Item): Promise<PartText> {
 	await env.AUDIO.put(partKey(item.id), JSON.stringify(partOf(chunks[0])));
 	item.title = `${art.title} (Part 1 of ${parts})`;
 	return partOf(chunks[0]);
+}
+
+/** Read text that was sent to /add. Markdown is made plain, and its headings become chapters. */
+async function textArticle(env: Env, item: Item): Promise<Article> {
+	const obj = await env.AUDIO.get(partKey(item.id));
+	if (!obj) throw new Error("The text is missing");
+	const { text, headings, h1 } = markdownToSpeech(await obj.text());
+	if (!text) throw new Error("The text was empty after I took out the markdown");
+	const title = item.title || h1 || text.split("\n")[0].slice(0, 80).replace(/\s+\S*$/, "") + (text.length > 80 ? "…" : "");
+	return { title, text, headings, site: item.url ? new URL(item.url).hostname.replace(/^www\./, "") : undefined };
+}
+
+/** Turn markdown (or plain text) into paragraphs to read aloud. */
+function markdownToSpeech(md: string): { text: string; headings: string[]; h1?: string } {
+	const paras: string[] = [];
+	const headings: string[] = [];
+	let h1: string | undefined;
+	let buf: string[] = [];
+	let fence = false;
+	const flush = () => {
+		if (buf.length) paras.push(buf.join(" "));
+		buf = [];
+	};
+	const inline = (s: string) =>
+		s
+			.replace(/<[^>]+>/g, "")
+			.replace(/!\[[^\]]*\]\([^)]*\)/g, "")
+			.replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+			.replace(/\[([^\]]+)\]\[[^\]]*\]/g, "$1")
+			.replace(/`([^`]+)`/g, "$1")
+			.replace(/(\*\*|__)(.+?)\1/g, "$2")
+			.replace(/(^|\W)[*_]([^*_\s][^*_]*?)[*_](?=\W|$)/g, "$1$2")
+			.replace(/~~(.+?)~~/g, "$1")
+			.replace(/\s+/g, " ")
+			.trim();
+	for (const line of md.replace(/\r\n?/g, "\n").split("\n")) {
+		if (/^\s*(```|~~~)/.test(line)) {
+			fence = !fence;
+			flush();
+			continue;
+		}
+		if (fence) continue; // Code is not read aloud.
+		if (/^\s*$/.test(line) || /^\s*([-*_]\s*){3,}$/.test(line) || /^\s*\|?\s*:?-{3,}/.test(line)) {
+			flush();
+			continue;
+		}
+		const h = line.match(/^\s{0,3}(#{1,6})\s+(.*?)\s*#*\s*$/);
+		if (h) {
+			flush();
+			const t = inline(h[2]);
+			if (!t) continue;
+			if (h[1].length === 1 && !h1 && !paras.length) {
+				h1 = t; // The title is read in the intro, so it is not read twice.
+				continue;
+			}
+			const p = /[.!?:]$/.test(t) ? t : `${t}.`;
+			paras.push(p);
+			if (p.length <= 200) headings.push(p);
+			continue;
+		}
+		// List items and quotes become their own sentences.
+		const item = line.match(/^\s*(?:[-*+]|\d+[.)])\s+(.*)$/);
+		if (item) {
+			flush();
+			const t = inline(item[1]);
+			if (t) paras.push(/[.!?:;]$/.test(t) ? t : `${t}.`);
+			continue;
+		}
+		const t = inline(line.replace(/^\s*>+\s?/, "").replace(/\|/g, " "));
+		if (t) buf.push(t);
+	}
+	flush();
+	return { text: paras.join("\n\n"), headings, h1 };
 }
 
 async function partText(env: Env, item: Item): Promise<PartText> {
