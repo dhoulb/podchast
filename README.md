@@ -42,7 +42,7 @@ Keep a copy in your password manager.
 - Secret `TOKEN`: the token from step 3.
 - Variable `VOICE` (optional): an Edge voice name, for example `en-GB-SoniaNeural`. The default is `en-NZ-MitchellNeural`.
 - Variable `RATE` (optional): speech speed, for example `+10%`.
-- Variable `SHORTCUT_URL` (optional): an iCloud link to your iOS Shortcut. The status page then shows an **Add to share sheet** button.
+- Variable `SHORTCUT_URL` (optional): an iCloud link to your own copy of the iOS Shortcut. The default is the shared Podchast Shortcut.
 
 Then push to `main`, or run the **Deploy** workflow by hand from the **Actions** tab.
 
@@ -55,7 +55,11 @@ npx wrangler deploy
 
 Your Worker is now at `https://podchast.<your-subdomain>.workers.dev`. Open `https://podchast.<your-subdomain>.workers.dev/<TOKEN>` to see the status page.
 
-### 5. Make the iOS Shortcut
+### 5. Add the iOS Shortcut
+
+**Quick way:** open your status page on your iPhone. Tap **Copy my add URL**, then **Add to share sheet**. Paste the URL when Shortcuts asks for it. (The button opens [this shared Shortcut](https://www.icloud.com/shortcuts/0f622097bb4a45f980ae39ba117be47b).)
+
+**Or make it yourself:**
 
 1. Open the **Shortcuts** app. Tap **+** to make a new shortcut. Name it **Podchast**.
 2. Tap the **i** (details) button. Turn on **Show in Share Sheet**. Close the details.
@@ -67,8 +71,6 @@ Your Worker is now at `https://podchast.<your-subdomain>.workers.dev`. Open `htt
    - You do not need headers. The token is in the URL.
 5. Add the action **Show Notification**. Set its text to **Contents of URL**.
 6. In Safari (or any app), tap **Share**, then **Podchast**. You see "Added to Podchast: …". The episode is ready in a few minutes.
-
-If someone already shared a Podchast Shortcut link with you, use it instead. Open your status page, tap **Copy my add URL**, then open the link. Paste your add URL when Shortcuts asks for it.
 
 To share your own Shortcut: in the Shortcut, tap **i**, then **Setup**, and add an **Import Question** for the URL. Then long-press the Shortcut and tap **Share**, then **Copy iCloud Link**. The Import Question removes your token from the shared copy.
 
