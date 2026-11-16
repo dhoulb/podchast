@@ -57,7 +57,7 @@ Your Worker is now at `https://podchast.<your-subdomain>.workers.dev`. Open `htt
 
 ### 5. Add the iOS Shortcut
 
-**Quick way:** open your status page on your iPhone. Tap **Copy MOUTH URL** on the 👄 MOUTH tab, then **Add 🍖 DEVOUR shortcut**. Paste the URL when Shortcuts asks for it. (The button opens [this shared Shortcut](https://www.icloud.com/shortcuts/f463e3946d2b458a937e6a63fa85b45a).)
+**Quick way:** open your status page on your iPhone. Tap **Copy MOUTH URL** on the 🫦 MOUTH tab, then **Add 🍖 DEVOUR shortcut**. Paste the URL when Shortcuts asks for it. (The button opens [this shared Shortcut](https://www.icloud.com/shortcuts/f463e3946d2b458a937e6a63fa85b45a).)
 
 **Or make it yourself:**
 

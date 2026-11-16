@@ -208,7 +208,7 @@ function hms(sec = 0): string {
 
 function feedXml(env: Env, origin: string, items: Item[], file = FEED): string {
 	const base = `${origin}/${env.TOKEN}`;
-	const about = esc(`${growl(Number(env.RETENTION_DAYS) || 30)}\n\nFeed my 👄 MOUTH here: ${base}`);
+	const about = esc(`${growl(Number(env.RETENTION_DAYS) || 30)}\n\nFeed my 🫦 MOUTH here: ${base}`);
 	const title = env.FEED_TITLE || "Podchast";
 	const entries = items
 		.filter((i) => i.status === "done" || i.status === "failed")
@@ -287,16 +287,16 @@ const GROWLS = [
 ];
 function growl(days: number): string {
 	const line = GROWLS[Math.floor(Math.random() * GROWLS.length)];
-	return `${line} Anything you do not listen to in ${days} days, I EAT AGAIN. FOREVER. NO TAKEBACKS. 🦷📜🔊`;
+	return `${line} Anything you do not listen to in ${days} days, I EAT AGAIN. FOREVER. NO TAKEBACKS. 🦷📜💥`;
 }
 
-const STATUS_LABEL: Record<Status, string> = { queued: "😋 In my mouth", processing: "🦷 CHEWING", done: "🔊 Burped out", failed: "🤮 Spat out" };
+const STATUS_LABEL: Record<Status, string> = { queued: "😋 In my mouth", processing: "🦷 CHEWING", done: "💥 Burped out", failed: "🤮 Spat out" };
 
 function statusPage(env: Env, origin: string, items: Item[], note = ""): string {
 	const base = `${origin}/${env.TOKEN}`;
 	// A bookmark that sends the current page to /add, then shows this page.
 	const bookmarklet = `javascript:location.href=${JSON.stringify(`${base}/add?url=`)}+encodeURIComponent(location.href)`;
-	const title = "Podchast";
+	const title = "🍖 PODCHAST";
 	const rows = items
 		.map((i) => {
 			const meta = [i.duration && hms(i.duration), i.words && `${i.words.toLocaleString("en-GB")} words`, i.chapters && `${i.chapters} chapters`, i.site, new Date(i.created).toLocaleDateString("en-GB", { day: "numeric", month: "short" })].filter(Boolean);
@@ -313,8 +313,8 @@ ${i.error ? `<p class="err">${esc(i.error)}</p>` : ""}
 		`<button type="button" class="${cls}" onclick="navigator.clipboard.writeText('${esc(value)}').then(()=>this.textContent=NOMS[Math.floor(Math.random()*NOMS.length)])">${label}</button>`;
 	const shortcut = env.SHORTCUT_URL
 		? `<p>HELLO TINY GLASS RECTANGLE. Put me in your share sheet:</p><ol class="steps"><li>Tap <b>Copy MOUTH URL</b>.</li><li>Tap <b>Add 🍖 DEVOUR shortcut</b>. When Shortcuts asks, paste the URL.</li><li>In Safari or any app, tap <b>Share → 🍖 DEVOUR</b>. I EAT IT. OM.</li></ol>
-<div class="row">${copy("Copy MOUTH URL 👄", `${base}/add`)}<a class="btn gold" href="${esc(env.SHORTCUT_URL)}">Add 🍖 DEVOUR shortcut</a></div>`
-		: `<p>NO SHORTCUT LINK?! RUDE. Fine. Build a Shortcut that sends a POST with JSON <code class="inline">{"url": "…"}</code> to my 👄 MOUTH URL. The README has the steps. (I do not read READMEs. I EAT them.)</p><div class="row">${copy("Copy MOUTH URL 👄", `${base}/add`)}</div>`;
+<div class="row">${copy("Copy MOUTH URL 🫦", `${base}/add`)}<a class="btn gold" href="${esc(env.SHORTCUT_URL)}">Add 🍖 DEVOUR shortcut</a></div>`
+		: `<p>NO SHORTCUT LINK?! RUDE. Fine. Build a Shortcut that sends a POST with JSON <code class="inline">{"url": "…"}</code> to my 🫦 MOUTH URL. The README has the steps. (I do not read READMEs. I EAT them.)</p><div class="row">${copy("Copy MOUTH URL 🫦", `${base}/add`)}</div>`;
 	return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>${esc(title)}</title>
 <link rel="manifest" href="${esc(base)}/manifest.webmanifest"><link rel="apple-touch-icon" href="${esc(base)}/icon-180.png"><link rel="icon" href="${esc(base)}/icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="${esc(title)}"><meta name="theme-color" content="#0392b4"><script>document.documentElement.classList.add("js")</script>
@@ -364,23 +364,23 @@ code.inline{display:inline;padding:1px 4px;border-style:solid}
 @media (prefers-color-scheme:dark){html{background:#04222c}:root{--parch:#2a2f3a;--parch-d:#444b59;--ink:#f3ead6;--wood:#e8cf9f;--teal-dd:#5fd8e6}body{background:radial-gradient(circle at 50% 0,#0b6f86 0,#06485a 45%,#04222c 100%) fixed}input[type=url],input[type=text],textarea,code{background:#1d222b !important;color:var(--ink)}.pill{color:#20293c}.pill.done,.pill.processing,.pill.failed{color:#fff}.btn,button.btn{border-color:#20293c;box-shadow:0 4px 0 #000}.btn.gold{color:#20293c}h1{-webkit-text-stroke-color:#20293c;text-shadow:0 4px 0 #000}.note{color:#20293c}}
 </style></head><body><main>
 <header class="hero"><img src="/${HERO}" alt="The Mimic chest, eating a pile of articles"><div><h1>${esc(title)}</h1><p id="growl">ARTICLES IN. NOISES OUT. EVERYTHING EATEN AGAIN IN ${Number(env.RETENTION_DAYS) || 30} DAYS. OM NOM.</p></div></header>
-<nav class="tabs" role="tablist"><a href="#mouth" role="tab">👄 MOUTH</a><a href="#guts" role="tab">🫀 GUTS</a><a href="#noises" role="tab">🔊 NOISES</a></nav>
+<nav class="tabs" role="tablist"><a href="#mouth" role="tab">🫦 MOUTH</a><a href="#guts" role="tab">🪎 GUTS</a><a href="#noises" role="tab">💥 NOISES</a></nav>
 <section id="mouth" class="tab">
-<p class="lead">Feed things into my 👄 MOUTH. I store them in my 🫀 GUTS. Then you hear the 🔊 NOISES. OM NOM.</p>
+<p class="lead">Feed things into my 🫦 MOUTH. I store them in my 🪎 GUTS. Then you hear the 💥 NOISES. OM NOM.</p>
 <div class="panel"><h2>Add a URL or content</h2><form class="add" method="post" action="${esc(base)}/add"><input type="url" name="url" placeholder="https://… (PUT A LINK IN MY MOUTH)"><button class="btn gold">🍖 DEVOUR</button>
 <details><summary>…or VOM A PILE OF TEXT AT ME 🤢</summary><input type="text" name="title" placeholder="Title (optional, I will guess)"><textarea name="content" rows="8" placeholder="Paste words. Markdown is fine. ## Headings become chapters. I EAT IT ALL."></textarea><button class="btn gold">🍖 DEVOUR</button></details></form></div>
 <div class="panel"><h2>📱 iPhone and iPad</h2>${shortcut}</div>
-<div class="panel"><h2>🔖 Any browser (Chrome too)</h2><ol class="steps"><li>Show your bookmarks bar. In Chrome, press <b>⌘⇧B</b>.</li><li>DRAG the button below onto the bar. Do NOT click it here.</li><li>On any article, click the bookmark. The page goes in my 👄 MOUTH.</li></ol><div class="row"><a class="btn gold" href="${esc(bookmarklet)}" onclick="event.preventDefault();this.textContent='DRAG ME. DO NOT POKE ME. 😤'">🍖 DEVOUR</a></div><p class="meta">The bookmark holds your token. Keep it out of shared bookmark folders.</p></div>
+<div class="panel"><h2>🔖 Any browser (Chrome too)</h2><ol class="steps"><li>Show your bookmarks bar. In Chrome, press <b>⌘⇧B</b>.</li><li>DRAG the button below onto the bar. Do NOT click it here.</li><li>On any article, click the bookmark. The page goes in my 🫦 MOUTH.</li></ol><div class="row"><a class="btn gold" href="${esc(bookmarklet)}" onclick="event.preventDefault();this.textContent='DRAG ME. DO NOT POKE ME. 😤'">🍖 DEVOUR</a></div><p class="meta">The bookmark holds your token. Keep it out of shared bookmark folders.</p></div>
 <div class="panel"><h2>💻 Mac</h2><ol class="steps"><li>The iPhone Shortcut syncs through iCloud. In Safari, use <b>Share → 🍖 DEVOUR</b>.</li><li>Want me in your Dock? In Safari, choose <b>File → Add to Dock</b>. I will sit there. Watching. Hungry.</li></ol></div>
 <div class="panel"><h2>🤖 Android</h2><ol class="steps"><li>Open this page in Chrome.</li><li>Tap <b>Add to Home screen</b>.</li><li>Share any link to <b>Podchast</b>. I pay no rent. I eat links. OM.</li></ol></div>
 </section>
 <section id="guts" class="tab">
 ${note ? `<div class="panel note">${esc(note)}</div>` : ""}
-<p class="lead">Everything in my 🫀 GUTS. Chewed things become 🔊 NOISES. I digest it all after ${Number(env.RETENTION_DAYS) || 30} days.</p>
-<ul>${rows || `<li class="card empty">My 🫀 GUTS are EMPTY. I AM SO HUNGRY. I could eat a WHOLE NEWSLETTER. Go to <a href="#mouth">👄 MOUTH</a> and feed me before I eat the CSS. 🫥</li>`}</ul>
+<p class="lead">Everything in my 🪎 GUTS. Chewed things become 💥 NOISES. I digest it all after ${Number(env.RETENTION_DAYS) || 30} days.</p>
+<ul>${rows || `<li class="card empty">My 🪎 GUTS are EMPTY. I AM SO HUNGRY. I could eat a WHOLE NEWSLETTER. Go to <a href="#mouth">🫦 MOUTH</a> and feed me before I eat the CSS. 🫥</li>`}</ul>
 </section>
 <section id="noises" class="tab">
-<div class="panel"><h2>Listen to my 🔊 NOISES in your podcast player</h2><p>Copy this URL. Add it to your podcast app. Keep it secret: anyone with the token in it can feed me. ANYONE.</p><code>${esc(base)}/${FEED}</code><div class="row" style="margin-top:10px">${copy("Copy NOISES URL 🔊", `${base}/${FEED}`)}<a class="btn gold" href="${esc(base)}/${FEED}">Open raw XML 👀</a></div></div>
+<div class="panel"><h2>Listen to my 💥 NOISES in your podcast player</h2><p>Copy this URL. Add it to your podcast app. Keep it secret: anyone with the token in it can feed me. ANYONE.</p><code>${esc(base)}/${FEED}</code><div class="row" style="margin-top:10px">${copy("Copy NOISES URL 💥", `${base}/${FEED}`)}<a class="btn gold" href="${esc(base)}/${FEED}">Open raw XML 👀</a></div></div>
 <div class="panel"><h2>Add it to your app</h2><ul class="steps"><li><b>Pocket Casts:</b> tap <b>Search</b>, then paste the URL.</li><li><b>Apple Podcasts:</b> tap <b>Library</b>, then <b>…</b>, then <b>Follow a Show by URL</b>, then paste. (Yes, it is hidden. Apple fears me.)</li><li><b>Overcast:</b> tap <b>+</b>, then <b>Add URL</b>, then paste.</li></ul></div>
 </section>
 </main>
