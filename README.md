@@ -57,7 +57,7 @@ Your Worker is now at `https://podchast.<your-subdomain>.workers.dev`. Open `htt
 
 ### 5. Add the iOS Shortcut
 
-**Quick way:** open your status page on your iPhone. Tap **Copy my add URL**, then **Add to share sheet**. Paste the URL when Shortcuts asks for it. (The button opens [this shared Shortcut](https://www.icloud.com/shortcuts/0f622097bb4a45f980ae39ba117be47b).)
+**Quick way:** open your status page on your iPhone. Tap **Copy my mouth URL**, then **Put me in your share sheet**. Paste the URL when Shortcuts asks for it. (The button opens [this shared Shortcut](https://www.icloud.com/shortcuts/0f622097bb4a45f980ae39ba117be47b).)
 
 **Or make it yourself:**
 
@@ -125,8 +125,9 @@ All private URLs contain the secret `TOKEN`. Keep them private.
 | URL | Use |
 | --- | --- |
 | `POST /<TOKEN>/add` | Add an article. Send the URL as JSON `{"url": "..."}`, as form field `url`, or as plain text. Replies in plain text (JSON if you send `Accept: application/json`). |
+| `POST /<TOKEN>/add` (text) | Add text instead of a web page. Send JSON `{"content": "...", "title": "..."}`. `title` is optional. `url` is optional and becomes the source link. Markdown is made plain, and `##` headings become chapters. A plain-text body with no link and over 200 characters is also read as text. Limit: 400,000 characters. |
 | `POST /add` | The same, with the token in an `Authorization: Bearer <TOKEN>` header. |
-| `GET /<TOKEN>` | Status page. Shows all items and has a form to add a URL. |
+| `GET /<TOKEN>` | Status page. Shows all items and has a form to add a URL or paste text. |
 | `GET /<TOKEN>/feed.xml` | Podcast feed. Add this to your podcast app. |
 | `GET /<TOKEN>/cover.jpg` | Podcast artwork (`assets/cover.jpg`, 1400x1400). |
 | `GET /<TOKEN>/audio/<id>.mp3` | Episode audio (supports range requests). |

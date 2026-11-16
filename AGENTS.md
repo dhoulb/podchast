@@ -21,6 +21,7 @@ Still ask Dave before you:
 
 - Cloudflare Workers (Free plan), TypeScript, no runtime dependencies.
 - R2 bucket `podchast`: `items/<id>` (item JSON, also in `customMetadata.item`), `audio/<id>.mp3` and `parts/<id>.txt` (text of one part of a long article). Lifecycle rules delete all three prefixes after 31 days.
+- `/add` takes a `url`, or `content` (text or markdown) with an optional `title`. Text is kept in `parts/<id>.txt` until its job reads it (`item.text` is set).
 - Queue `podchast-jobs`: one job per episode. The consumer gets the article, does TTS and writes the MP3. Articles over 40,000 characters (`PART_CHARS`) become several episodes ("Part 1 of 3"), one job each.
 - Cron `17 3 * * *`: deletes old items.
 - TTS: Microsoft Edge "Read aloud" voices over a WebSocket (`src/edge-tts.ts`, `src/edge-drm.ts`). Workers AI `@cf/deepgram/aura-2-en` is the fallback (`src/tts.ts`).
