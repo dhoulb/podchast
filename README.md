@@ -46,7 +46,7 @@ All settings are optional. Add them in the same place, then deploy again.
 | `TTS_ENGINE`, `EDGE_FORMAT`, `AI_MODEL`, `AI_SPEAKER` | Variable | TTS settings. See [TTS engine](#tts-engine). |
 | `CLOUDFLARE_ACCOUNT_ID` | Variable | Only if your API token can see more than one Cloudflare account. |
 
-The defaults are in `wrangler.jsonc`. A secret that you do not set in GitHub is not changed on the Worker.
+The defaults are in `wrangler.jsonc`. A secret that you do not set in GitHub is not changed on the Worker. If you put a setting on the wrong tab (a variable as a secret, or a secret as a variable), it still works.
 
 ### 5. Add the iOS Shortcut
 
