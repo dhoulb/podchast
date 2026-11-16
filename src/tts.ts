@@ -25,7 +25,7 @@ async function retry<T>(fn: () => Promise<T>, tries = 3): Promise<T> {
  * up (it resets at 00:00 UTC), or the page or PDF has no text to read.
  */
 export function isPermanent(e: unknown): boolean {
-	return /"internalCode":4006|daily free allocation|Could not find article text|has no text I can read/.test(String((e as Error)?.message ?? e));
+	return /"internalCode":4006|daily free allocation|could not find the article text|no text I can read/.test(String((e as Error)?.message ?? e));
 }
 
 /** Audio for each text chunk, in order. Chunk timings let the caller place chapter marks. cues[i] are the sentence times in chunk i, if the engine gives them. */

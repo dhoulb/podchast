@@ -39,11 +39,12 @@ export async function fetchArticle(url: string, pdf?: (bytes: ArrayBuffer, url: 
 		});
 		if (resp.ok || ![401, 403, 429, 503].includes(resp.status)) break;
 	}
-	if (!resp || !resp.ok) throw new Error(`Fetch failed: HTTP ${resp?.status} (the site may block automated requests)`);
+	if (!resp) throw new Error(`${host(url)}: no answer`);
+	if (!resp.ok) throw new Error([401, 403, 429, 503].includes(resp.status) ? `${host(url)}: blocked us (HTTP ${resp.status}). Some sites block robots.` : `${host(url)}: page did not load (HTTP ${resp.status})`);
 	const type = resp.headers.get("content-type") ?? "";
 	if (pdf && (type.includes("application/pdf") || (/\.pdf(\?|$)/i.test(url) && type.includes("octet-stream")))) return pdf(await resp.arrayBuffer(), resp.url || url);
 	if (type.includes("text/plain")) return { title: titleFromUrl(url), text: tidy(await resp.text()), site: host(url) };
-	if (!type.includes("html") && type) throw new Error(`Not a web page (${type.split(";")[0]})`);
+	if (!type.includes("html") && type) throw new Error(`${host(url)}: not a web page (${type.split(";")[0]})`);
 	return extractArticle(resp, resp.url || url);
 }
 
@@ -202,7 +203,7 @@ export async function extractArticle(resp: Response, url: string): Promise<Artic
 	if (text.length < 200) {
 		const count = (f: (b: Block) => boolean) => blocks.filter(f).length;
 		const stats = { depth, blocks: blocks.length, p: count((b) => b.tag === "p"), chrome: count((b) => b.chrome), body: count((b) => b.body), article: count((b) => b.article), main: count((b) => b.main), long: count((b) => b.text.length >= 30), tags: [...new Set(blocks.slice(0, 40).map((b) => `${b.tag}${b.chrome ? "*" : ""}:${b.text.length}`))].join(" ") };
-		throw new Error(`Could not find article text on the page ${JSON.stringify(stats)}`);
+		throw new Error(`${host(url)}: could not find the article text on the page ${JSON.stringify(stats)}`);
 	}
 
 	return {
