@@ -97,7 +97,7 @@ You can email or forward things to Podchast. A short email with a link adds that
 5. The consumer joins the MP3 parts and writes one file to R2.
    Article headings become chapters (ID3 `CHAP` frames in the MP3).
    Each episode has a timed transcript (WebVTT, one line for each sentence). The feed links it with `<podcast:transcript>`, so Pocket Casts can show the words as they are spoken.
-   Articles longer than 40,000 characters (about 40 minutes) become several episodes: "Part 1 of 3", "Part 2 of 3" and so on. Each part is its own queue job.
+   Articles longer than 15,000 characters (about 15 minutes) become several episodes: "Part 1 of 3", "Part 2 of 3" and so on. Each part is its own queue job.
 6. `GET /<TOKEN>/noises.xml` shows the finished items as a podcast feed.
 7. If an article fails three times, the feed gets a short "🤮 SPAT OUT: …" episode. Its notes give the reason.
 8. The consumer keeps the article text in `read/<id>.md`, and the original PDF in `read/<id>.pdf`. These files stay forever. `GET /<TOKEN>/read/<id>` shows the text as a page.
@@ -110,7 +110,7 @@ You can email or forward things to Podchast. A short email with a link adds that
 | Microsoft Edge "Read aloud" (default) | Very good neural voices | Free | Not an official API. Microsoft can change or block it. |
 | Workers AI `@cf/deepgram/aura-2-en` (optional) | Good | About $0.03 per 1,000 characters (about $0.50 to $1 for a long article) | Official Cloudflare product |
 
-The Worker uses only Edge TTS (`TTS_ENGINE` is `edge-only`), so every episode has the same voice. If Edge TTS fails, the job waits and tries again, for about 90 minutes in total. Set `TTS_ENGINE` to `edge` to use Workers AI when Edge TTS fails (a different voice, and the free plan allows about 10 articles a day).
+The Worker uses only Edge TTS (`TTS_ENGINE` is `edge-only`), so every episode has the same voice. If Edge TTS fails, the job waits and tries again, up to 5 attempts in about 30 minutes. The status page shows each one as "Attempt 2/5". Set `TTS_ENGINE` to `edge` to use Workers AI when Edge TTS fails (a different voice, and the free plan allows about 10 articles a day).
 
 "EdgeTTS" is the Edge "Read aloud" service. The Worker talks to it over a WebSocket, the same as the [edge-tts](https://github.com/rany2/edge-tts) Python package. The token code in `src/edge-drm.ts` is a port of edge-tts 7.3.1. If Edge TTS stops working, compare that file with the latest edge-tts `drm.py` and `constants.py`.
 
@@ -136,7 +136,7 @@ All private URLs contain the secret `TOKEN`. Keep them private.
 | `GET /<TOKEN>/noises.xml` | Podcast feed. Add this to your podcast app. `feed.xml` is the old name and still works. |
 | `GET /cover-v5.jpg` | Podcast artwork (`assets/cover.jpg`, 1400x1400). Public, so podcast apps can fetch it. |
 | `GET /<TOKEN>/audio/<id>.mp3` | Episode audio (supports range requests). |
-| `POST /<TOKEN>/retry/<id>` | Try a failed item again. |
+| `POST /<TOKEN>/retry/<id>` | Try an item again from attempt 1 (Re-chomp). |
 | `POST /<TOKEN>/delete/<id>` | Delete an episode (the status page has a button). |
 | `GET /<TOKEN>/manifest.webmanifest` | Web app manifest. Makes the status page a Home Screen app, and an Android share target. |
 
@@ -159,5 +159,5 @@ curl -X POST --data-binary @fixture.html http://127.0.0.1:8799/
 ## Limits
 
 - The extractor is a simple heuristic. Most news sites and blogs work. Pages that need JavaScript or a login do not work.
-- On the Workers Free plan, one job can make 50 outbound requests. Long articles are split into episodes of about 40,000 characters, so there is no length limit.
+- On the Workers Free plan, one job can make 50 outbound requests. Long articles are split into episodes of about 15,000 characters, so there is no length limit.
 - Audio retention is set by `RETENTION_DAYS` (default 90) and the R2 lifecycle rule on `audio/`. Items and `read/` files have no lifecycle rule.

@@ -71,9 +71,10 @@ const pdfKey = (id: string) => `read/${id}.pdf`;
 // Part 2 of an article shares the text of part 1.
 const rootId = (id: string) => id.replace(/-p\d+$/, "");
 
-// Articles longer than this are split into several episodes (about 40 minutes each).
-// Each part is its own queue job, so each part gets its own subrequest and time limits.
-const PART_CHARS = 40_000;
+// Articles longer than this are split into several episodes (about 15 minutes each).
+// Each part is its own queue job, so each part gets its own subrequest, time and CPU limits.
+// On the Free plan, parts of 30,000 characters or more were often stopped for too much CPU.
+const PART_CHARS = 15_000;
 // Biggest text /add takes (about 7 hours of audio).
 const MAX_TEXT = 400_000;
 const audioKey = (id: string) => `audio/${id}.mp3`;
@@ -179,7 +180,18 @@ async function readAddRequest(req: Request, url: URL): Promise<AddRequest> {
 
 const str = (v: unknown) => (typeof v === "string" ? v : "");
 
-async function addItem(env: Env, add: AddRequest): Promise<Item> {
+/** Add a link or text. A link that is already in the ABYSS is not added again: the old item is used, and chewed again if it needs it. */
+async function addItem(env: Env, add: AddRequest): Promise<{ item: Item; same?: string }> {
+	if (add.target && !add.content && !add.pdf) {
+		const old = (await listItems(env)).find((i) => i.url === add.target && (i.part ?? 1) === 1);
+		const item = old && (await loadItem(env, old.id));
+		if (item) {
+			const v = view(item);
+			if (v.state === "chewing" || v.state === "waiting") return { item, same: "Already in my 🕳️ ABYSS. I am still chewing it." };
+			if (v.state === "done") return { item, same: "Already in my 🕳️ ABYSS. It is in your feed." };
+			return { item: await rechomp(env, item), same: "Already in my 🕳️ ABYSS. Chewing it again." };
+		}
+	}
 	const item: Item = { id: newId(), url: add.target ?? "", status: "queued", created: new Date().toISOString() };
 	if (add.content) {
 		// Keep the text forever. The job reads it from there.
@@ -194,6 +206,26 @@ async function addItem(env: Env, add: AddRequest): Promise<Item> {
 	}
 	await saveItem(env, item);
 	await env.JOBS.send({ id: item.id });
+	return { item };
+}
+
+/** Queue an item again from attempt 1. A done episode is made again from the kept text, with a new date, like 🍖 MEAT. */
+async function rechomp(env: Env, found: Item): Promise<Item> {
+	let item = found;
+	// The text of a later part is deleted when the part is done. Then re-chomp the whole article from part 1.
+	if ((item.part ?? 1) > 1 && !(await env.AUDIO.head(partKey(item.id)))) item = (await loadItem(env, rootId(item.id))) ?? item;
+	const force = item.status === "done";
+	if (!force) {
+		// Remove the length of the "spat out" clip from an earlier failure.
+		item.bytes = undefined;
+		item.duration = undefined;
+	}
+	item.status = "queued";
+	item.error = undefined;
+	item.attempt = undefined;
+	item.retryAt = undefined;
+	await saveItem(env, item);
+	await env.JOBS.send({ id: item.id, force });
 	return item;
 }
 
@@ -315,52 +347,85 @@ function growl(days: number): string {
 	return `${line} NOISES fade after ${days} days. The words stay in my 🕳️ ABYSS FOREVER. 🦷📜💥`;
 }
 
-// A job in the queue updates its item at least every 30 minutes (the longest retry gap), so an older one is stuck.
-const STUCK_MS = 40 * 60_000;
-
-/** Show Re-chomp on every item, except one that is in the queue or being chewed now. */
-const canRechomp = (i: Item) => (i.status !== "queued" && i.status !== "processing") || Date.now() - Date.parse(i.updated ?? i.created) > STUCK_MS;
-
-// A queue run lasts at most 15 minutes. A run that Cloudflare stops (too much CPU) cannot update its item, so an older "processing" item is waiting for its next try.
+// A queue run lasts at most 15 minutes. A run that Cloudflare stops (too much CPU) cannot update its item.
 const RUN_MS = 16 * 60_000;
-const chewing = (i: Item) => i.status === "processing" && Date.now() - Date.parse(i.updated ?? i.created) < RUN_MS;
+// The queue tries a stopped run again within a few minutes, if it has attempts left. Jobs run one at a time, so allow for a wait.
+const STUCK_MS = 45 * 60_000;
+// A job that waits this long after its retry time is lost.
+const LATE_MS = 60 * 60_000;
 
-/** Queue details for the status page, such as "Try 2 of 7 · started 3 min ago". */
-function progress(i: Item): string {
+type View = { state: "chewing" | "waiting" | "done" | "meat" | "stuck" | "failed"; step: string; reason?: string };
+
+/** What an item is doing now, in words for the status page, such as "Attempt 2/5 · started 3 min ago". */
+function view(i: Item): View {
 	const mins = (ms: number) => `${Math.max(1, Math.round(ms / 60_000))} min`;
+	const age = Date.now() - Date.parse(i.updated ?? i.created);
 	const a = i.attempt;
-	if (chewing(i)) return a ? `Try ${a} of ${MAX_ATTEMPTS} · started ${mins(Date.now() - Date.parse(i.updated ?? i.created))} ago` : "";
-	if (i.status === "processing") return a ? `Try ${a} of ${MAX_ATTEMPTS} was stopped. Try ${a + 1} soon.` : "Stopped. Trying again soon.";
-	if (i.status === "queued") {
-		if (!a) return "Waiting for my teeth.";
-		const wait = i.retryAt ? Date.parse(i.retryAt) - Date.now() : 0;
-		return `Try ${a + 1} of ${MAX_ATTEMPTS} ${wait > 30_000 ? `in about ${mins(wait)}` : "any moment now"}`;
+	const n = (k: number) => `${k}/${MAX_ATTEMPTS}`;
+	const gaveUp = (k: number) => (k > MAX_ATTEMPTS ? `Gave up after ${k} attempts.` : `Gave up after attempt ${n(k)}.`) + " Tap Re-chomp to start again.";
+	const stuck: View = { state: "stuck", step: "Stuck. I stopped chewing and will not try again. Tap Re-chomp." };
+	if (i.status === "done") return i.gone ? { state: "meat", step: "" } : { state: "done", step: "" };
+	if (i.status === "failed") return { state: "failed", step: a ? gaveUp(a) : "Gave up. Tap Re-chomp to start again." };
+	if (i.status === "processing") {
+		if (age < RUN_MS) return { state: "chewing", step: `${a ? `Attempt ${n(a)}` : "Chewing"} · started ${mins(age)} ago` };
+		// The run is over, but it did not save a result: Cloudflare stopped it.
+		const reason = "Cloudflare stopped it (too much work).";
+		if (a && a >= MAX_ATTEMPTS) return { state: "failed", step: gaveUp(a), reason };
+		if (!a || age > STUCK_MS) return { ...stuck, reason };
+		return { state: "waiting", step: `Attempt ${n(a)} was stopped. Attempt ${n(a + 1)} soon.`, reason };
 	}
-	if (i.status === "failed" && a) return `Gave up after ${a} ${a === 1 ? "try" : "tries"}.`;
-	return "";
+	// Queued.
+	if (!a) return age > LATE_MS * 6 ? stuck : { state: "waiting", step: `Attempt ${n(1)} soon.` };
+	const wait = i.retryAt ? Date.parse(i.retryAt) - Date.now() : 0;
+	if (wait < -LATE_MS) return stuck;
+	return { state: "waiting", step: `Attempt ${n(a + 1)} ${wait > 30_000 ? `in about ${mins(wait)}` : "any moment now"}` };
 }
 
-const STATUS_LABEL: Record<Status, string> = { queued: "🫦 MOUTH", processing: "🦷 CHEWING", done: "💥 NOISE", failed: "🤮 YUCK" };
+const LABEL: Record<View["state"], [string, string]> = {
+	chewing: ["processing", "🦷 CHEWING"],
+	waiting: ["queued", "🫦 WAITING"],
+	done: ["done", "💥 NOISE"],
+	meat: ["meat", "🍖 MEAT"],
+	stuck: ["failed", "🧊 STUCK"],
+	failed: ["failed", "🤮 YUCK"],
+};
 // Done, but the audio is gone. Only the text is left.
 const MEAT = "🍖 MEAT";
+
+/** One line that counts the items, such as "1 chewing · 2 waiting · 4 done". */
+function summary(views: View[]): string {
+	const count = (s: View["state"][]) => views.filter((v) => s.includes(v.state)).length;
+	const parts: [number, string][] = [
+		[count(["chewing"]), "chewing"],
+		[count(["waiting"]), "waiting"],
+		[count(["stuck", "failed"]), "stuck or given up"],
+		[count(["done"]), "done"],
+		[count(["meat"]), "meat (text only)"],
+	];
+	return parts.filter(([k]) => k).map(([k, w]) => `${k} ${w}`).join(" · ");
+}
+
 
 function statusPage(env: Env, origin: string, items: Item[], note = ""): string {
 	const base = `${origin}/${env.TOKEN}`;
 	// A bookmark that sends the current page to /add, then shows this page.
 	const bookmarklet = `javascript:location.href=${JSON.stringify(`${base}/add?url=`)}+encodeURIComponent(location.href)`;
 	const title = "🍖 PODCHAST";
+	const views = items.map(view);
 	const rows = items
-		.map((i) => {
-			// A stopped run waits in the queue, so it shows as MOUTH.
-			const shown: Status = i.status === "processing" && !chewing(i) ? "queued" : i.status;
-			const step = progress(i);
-			const meta = [i.duration && hms(i.duration), i.words && `${i.words.toLocaleString("en-GB")} words`, i.chapters && `${i.chapters} chapters`, i.site, new Date(i.created).toLocaleDateString("en-GB", { day: "numeric", month: "short" })].filter(Boolean);
+		.map((i, k) => {
+			const v = views[k];
+			const [cls, label] = LABEL[v.state];
+			const done = v.state === "done" || v.state === "meat";
+			// The error is from the last attempt. A new attempt clears it.
+			const error = v.reason && i.error ? `${v.reason} Before that: ${i.error}` : (v.reason ?? i.error);
+			const meta = [done && i.duration && hms(i.duration), i.words && `${i.words.toLocaleString("en-GB")} words`, i.chapters && `${i.chapters} chapters`, i.site, new Date(i.created).toLocaleDateString("en-GB", { day: "numeric", month: "short" })].filter(Boolean);
 			return `<li class="card">
-<div class="row">${i.gone && i.status === "done" ? `<span class="pill meat">${MEAT}</span>` : `<span class="pill ${shown}">${STATUS_LABEL[shown]}</span>`}<span class="meta">${esc(meta.join(" · "))}</span></div>
-${step ? `<p class="meta">${esc(step)}</p>` : ""}
+<div class="row"><span class="pill ${cls}">${label}</span><span class="meta">${esc(meta.join(" · "))}</span></div>
+${v.step ? `<p class="step">${esc(v.step)}</p>` : ""}
 ${i.title ? `<h3>${esc(i.title)}</h3>` : `<h3 class="url">${esc(i.url || "Some text")}</h3>`}
-${i.error ? `<p class="err">${i.status === "queued" || i.status === "processing" ? "Last try failed. I will try again. " : ""}${esc(i.error)}</p>` : ""}
-<div class="row actions">${i.saved ? `<a href="${esc(`${base}/read/${rootId(i.id)}`)}">Read</a>` : ""}${i.status === "done" && !i.gone ? `<a href="${esc(`${base}/audio/${i.id}.mp3`)}">Play</a>` : ""}${i.url ? `<a href="${esc(i.url)}">Source</a>` : ""}${i.pdf ? `<a href="${esc(`${base}/read/${rootId(i.id)}.pdf`)}">PDF</a>` : ""}${canRechomp(i) ? `<form method="post" action="${esc(`${base}/retry/${i.id}`)}"><button class="link">Re-chomp</button></form>` : ""}
+${error && !done ? `<p class="err">${v.state === "chewing" ? "Last attempt: " : "What went wrong: "}${esc(error)}</p>` : ""}${error && done ? `<p class="err">${esc(error)}</p>` : ""}
+<div class="row actions">${i.saved ? `<a href="${esc(`${base}/read/${rootId(i.id)}`)}">Read</a>` : ""}${i.status === "done" && !i.gone ? `<a href="${esc(`${base}/audio/${i.id}.mp3`)}">Play</a>` : ""}${i.url ? `<a href="${esc(i.url)}">Source</a>` : ""}${i.pdf ? `<a href="${esc(`${base}/read/${rootId(i.id)}.pdf`)}">PDF</a>` : ""}${v.state !== "chewing" && v.state !== "waiting" ? `<form method="post" action="${esc(`${base}/retry/${i.id}`)}"><button class="link">Re-chomp</button></form>` : ""}
 <form method="post" action="${esc(`${base}/delete/${i.id}`)}" onsubmit="return confirm('DELETE this one? Forever? No take-backs??')"><button class="link danger">Delete</button></form></div>
 </li>`;
 		})
@@ -403,7 +468,7 @@ code{display:block;word-break:break-all;background:#fffaf0;border:2px dashed var
 ul{list-style:none;padding:0;margin:0;display:grid;grid-template-columns:minmax(0,1fr);gap:12px}
 .card{padding:12px 14px;min-width:0;overflow:hidden}
 .card .row{flex-wrap:nowrap;min-width:0}.card .row.actions{flex-wrap:wrap}.pill{flex:none}
-.card .meta{flex:1 1 auto;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.card .meta{flex:1 1 auto;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.step{margin:4px 0;font-size:14px}
 .card h3{margin:6px 0;font-size:19px;line-height:1.25;color:var(--ink);overflow-wrap:anywhere;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;line-clamp:3;overflow:hidden}
 .card h3.url{display:block;white-space:nowrap;text-overflow:ellipsis;font-size:16px}
 .meta{color:var(--wood);font-size:14px}
@@ -437,6 +502,7 @@ ${env.EMAIL_TO ? `<div class="panel"><h2>📧 Email</h2><ol class="steps"><li>Se
 </section>
 <section id="abyss" class="tab">
 ${note ? `<div class="panel note">${esc(note)}</div>` : ""}
+${items.length ? `<div class="panel summary"><b>${esc(summary(views))}</b></div>` : ""}
 <p class="lead">Everything in my 🕳️ ABYSS. Chewed things become 💥 NOISES. NOISES fade after ${retentionDays(env)} days, but I keep the ${MEAT} (the words) FOREVER. Re-chomp the ${MEAT} to hear it again.</p>
 <ul>${rows || `<li class="card empty">My 🕳️ ABYSS is EMPTY. I AM SO HUNGRY. I could eat a WHOLE NEWSLETTER. Go to <a href="#mouth">🫦 MOUTH</a> and feed me before I eat the CSS. 🫥</li>`}</ul>
 </section>
@@ -632,22 +698,13 @@ async function handleFetch(req: Request, env: Env): Promise<Response> {
 		if (!wantsHtml(req)) return queueReply(req, env, add);
 		const bad = addProblem(add);
 		if (bad) return new Response(bad, { status: 400, headers: { "Content-Type": "text/plain; charset=utf-8" } });
-		await addItem(env, add);
-		return html(statusPage(env, url.origin, await listItems(env), `OM NOM NOM! In my mouth: ${add.content ? (add.title ?? "a big pile of text") : add.target} 😋 Chewing soon.`));
+		const { same } = await addItem(env, add);
+		return html(statusPage(env, url.origin, await listItems(env), same ? `${same} ${add.target}` : `OM NOM NOM! In my mouth: ${add.content ? (add.title ?? "a big pile of text") : add.target} 😋 Chewing soon.`));
 	}
 	if (a === "retry" && b) {
-		let item = await loadItem(env, b);
+		const item = await loadItem(env, b);
 		if (!item) return new Response("Not found", { status: 404 });
-		// The text of a later part is deleted when the part is done. Then re-chomp the whole article from part 1.
-		if ((item.part ?? 1) > 1 && !(await env.AUDIO.head(partKey(item.id)))) item = (await loadItem(env, rootId(item.id))) ?? item;
-		// A done episode is made again from the kept text, with a new date, like 🍖 MEAT.
-		const force = item.status === "done";
-		item.status = "queued";
-		item.error = undefined;
-		item.attempt = undefined;
-		item.retryAt = undefined;
-		await saveItem(env, item);
-		await env.JOBS.send({ id: item.id, force });
+		await rechomp(env, item);
 		if (wantsHtml(req)) return Response.redirect(`${url.origin}/${env.TOKEN}`, 303);
 		return Response.json({ ok: true });
 	}
@@ -670,7 +727,8 @@ function addProblem(add: AddRequest): string | undefined {
 async function queueReply(req: Request, env: Env, add: AddRequest): Promise<Response> {
 	const bad = addProblem(add);
 	if (bad) return reply(req, 400, bad);
-	const item = await addItem(env, add);
+	const { item, same } = await addItem(env, add);
+	if (same) return reply(req, 200, `${same} 😋`, { id: item.id });
 	const what = add.content ? `${add.title ?? "a big pile of text"} (${add.content.length.toLocaleString("en-GB")} characters)` : add.target;
 	return reply(req, 200, `OM NOM NOM! SWALLOWED: ${what} 😋🦷 Burping it into your feed soon.`, { id: item.id });
 }
@@ -679,8 +737,9 @@ const html = (body: string) => new Response(body, { headers: { "Content-Type": "
 
 // ---------- Queue consumer ----------
 
-// Edge TTS can be slow or down for a while. Retry gaps: 2, 4, 8, 16, 30, 30 min (see retryDelay).
-const MAX_ATTEMPTS = 7;
+// Edge TTS can be slow or down for a while. Retry gaps: 2, 4, 8, 16 min (see retryDelay).
+// Keep in step with max_retries in wrangler.jsonc (MAX_ATTEMPTS - 1).
+const MAX_ATTEMPTS = 5;
 const retryDelay = (attempt: number) => Math.min(120 * 2 ** (attempt - 1), 1800);
 
 /** Debug job: speak one sentence with one engine and save the result under debug/. */
@@ -740,11 +799,16 @@ async function processJob(env: Env, job: Job, attempt: number): Promise<void> {
 	if (job.debug) return debugJob(env, job);
 	const item = await loadItem(env, job.id);
 	if (!item || (item.status === "done" && !job.force)) return;
+	// A run that Cloudflare stops (too much CPU) cannot save an error. The next attempt finds it still "processing".
+	const stopped = item.status === "processing" && item.attempt !== undefined && item.attempt < attempt;
+	item.error = stopped ? `Cloudflare stopped attempt ${item.attempt}/${MAX_ATTEMPTS} (too much work).` : undefined;
 	item.status = "processing";
 	item.attempt = attempt;
 	item.retryAt = undefined;
+	// Part 1 of an article that older code split into bigger parts: split it again into smaller parts.
+	const big = item.part === 1 && ((await env.AUDIO.head(partKey(item.id)))?.size ?? 0) > PART_CHARS * 1.5;
 	// Re-chomp of 🍖 MEAT or of a done episode: read the kept text again, and split it again if it is long.
-	const again = (item.gone || !!job.force) && (item.part ?? 1) === 1;
+	const again = ((item.gone || !!job.force) && (item.part ?? 1) === 1) || big;
 	if (again) {
 		item.part = undefined;
 		item.parts = undefined;
@@ -834,7 +898,7 @@ async function firstPart(env: Env, item: Item, again = false): Promise<PartText>
 	for (let i = 1; i < parts; i++) {
 		// Later parts get later dates, so podcast apps list them in order.
 		const at = new Date(created + i * 1000).toISOString();
-		const p: Item = { ...item, id: `${item.id}-p${i + 1}`, part: i + 1, parts, status: "queued", created: again ? ((await loadItem(env, `${item.id}-p${i + 1}`))?.created ?? at) : at, pdf: undefined };
+		const p: Item = { ...item, id: `${item.id}-p${i + 1}`, part: i + 1, parts, status: "queued", created: again ? ((await loadItem(env, `${item.id}-p${i + 1}`))?.created ?? at) : at, pdf: undefined, attempt: undefined, retryAt: undefined, error: undefined, bytes: undefined, duration: undefined, chapters: undefined, engine: undefined, transcript: undefined, gone: undefined };
 		if (again) p.aired = at;
 		p.title = `${art.title} (Part ${i + 1} of ${parts})`;
 		await env.AUDIO.put(partKey(p.id), JSON.stringify(partOf(chunks[i])));
@@ -1050,7 +1114,7 @@ export default {
 			const markdown = await pdfMarkdown(env, pdf.name, pdf.bytes);
 			const title = (mail.pdfs.length === 1 && subject) || pdf.name.replace(/\.pdf$/i, "");
 			const add: AddRequest = { token: "", target: null, content: markdown.trim(), title, pdf: pdf.bytes };
-			if (!addProblem(add)) added.push((await addItem(env, add)).id);
+			if (!addProblem(add)) added.push((await addItem(env, add)).item.id);
 		}
 		if (!mail.pdfs.length) {
 			// A short body with a link means "eat this link". Anything longer is the text itself.
@@ -1058,7 +1122,7 @@ export default {
 			const rest = mail.text.replace(/https?:\/\/\S+/g, "").trim();
 			const add: AddRequest =
 				target && rest.length < 300 ? { token: "", target, title: undefined } : { token: "", target: null, content: mail.text, title: subject || undefined };
-			if (!addProblem(add)) added.push((await addItem(env, add)).id);
+			if (!addProblem(add)) added.push((await addItem(env, add)).item.id);
 		}
 		console.log(`Email: added ${added.length} item(s) ${added.join(", ")}`);
 		if (!added.length) message.setReject("BLEH. That email had nothing I could eat. 😤");
