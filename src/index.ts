@@ -902,7 +902,7 @@ async function partText(env: Env, item: Item): Promise<PartText> {
 // A failed item shows in the feed as a short episode. All failed items share one
 // spoken clip; the reason is in the show notes, not in the audio.
 
-const FAILED_ID = "failed-v2";
+const FAILED_ID = "failed-v3";
 
 /** Make the shared "could not read this article" clip if it does not exist yet. */
 async function failureClip(env: Env): Promise<R2Object | null> {
@@ -916,7 +916,7 @@ async function addFailureClip(env: Env, item: Item): Promise<void> {
 	try {
 		const head = await failureClip(env);
 		item.bytes = head?.size;
-		item.duration = head ? Math.round((head.size * 8) / 48000) : undefined;
+		item.duration = head ? Math.round((head.size * 8) / (Number(/(\d+)kbitrate/.exec(env.EDGE_FORMAT ?? "")?.[1] ?? 48) * 1000)) : undefined;
 	} catch (e) {
 		console.error("Could not make the failure clip:", e);
 	}
