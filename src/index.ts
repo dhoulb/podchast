@@ -421,9 +421,9 @@ function statusPage(env: Env, origin: string, items: Item[], note = ""): string 
 			const error = v.reason && i.error ? `${v.reason} Before that, ${i.error}` : (v.reason ?? i.error);
 			const meta = [done && i.duration && hms(i.duration), i.words && `${i.words.toLocaleString("en-GB")} words`, i.chapters && `${i.chapters} chapters`, i.site, new Date(i.created).toLocaleDateString("en-GB", { day: "numeric", month: "short" })].filter(Boolean);
 			return `<li class="card">
-<div class="row"><span class="pill ${cls}">${label}</span><span class="meta">${esc(meta.join(" · "))}</span></div>
-${v.step ? `<p class="step">${esc(v.step)}</p>` : ""}
+<div class="row"><span class="pill ${cls}">${label}</span>${v.step ? `<span class="step ${cls}">${esc(v.step)}</span>` : ""}</div>
 ${i.title ? `<h3>${esc(i.title)}</h3>` : `<h3 class="url">${esc(i.url || "Some text")}</h3>`}
+${meta.length ? `<p class="meta">${esc(meta.join(" · "))}</p>` : ""}
 ${error ? `<p class="err">${esc(error)}</p>` : ""}
 <div class="row actions">${i.saved ? `<a href="${esc(`${base}/read/${rootId(i.id)}`)}">Read</a>` : ""}${i.status === "done" && !i.gone ? `<a href="${esc(`${base}/audio/${i.id}.mp3`)}">Play</a>` : ""}${i.url ? `<a href="${esc(i.url)}">Source</a>` : ""}${i.pdf ? `<a href="${esc(`${base}/read/${rootId(i.id)}.pdf`)}">PDF</a>` : ""}${v.state !== "chewing" && v.state !== "waiting" ? `<form method="post" action="${esc(`${base}/retry/${i.id}`)}"><button class="link">Re-chomp</button></form>` : ""}
 <form method="post" action="${esc(`${base}/delete/${i.id}`)}" onsubmit="return confirm('DELETE this one? Forever? No take-backs??')"><button class="link danger">Delete</button></form></div>
@@ -441,7 +441,7 @@ ${error ? `<p class="err">${esc(error)}</p>` : ""}
 <meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="${esc(title)}"><meta name="theme-color" content="#0392b4"><script>document.documentElement.classList.add("js")</script>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;700&display=swap" rel="stylesheet">
 <style>
-:root{--teal:#05aabe;--teal-d:#0392b4;--teal-dd:#0b5f78;--ink:#20293c;--parch:#f7e6c4;--parch-d:#e8cf9f;--wood:#6b4226;--iron:#3d4450;--gold:#f2b632;--ember:#ff7a1a;--red:#c8323c;--green:#2f9e5b}
+:root{--s-err:#c8323c;--s-done:#237a46;--s-chew:#b85000;--s-wait:#8a6200;--s-meat:#b4502f;--teal:#05aabe;--teal-d:#0392b4;--teal-dd:#0b5f78;--ink:#20293c;--parch:#f7e6c4;--parch-d:#e8cf9f;--wood:#6b4226;--iron:#3d4450;--gold:#f2b632;--ember:#ff7a1a;--red:#c8323c;--green:#2f9e5b}
 *{box-sizing:border-box}
 html{background:var(--teal-d);overflow-x:hidden;touch-action:pan-y;-webkit-text-size-adjust:100%;text-size-adjust:100%}
 body{margin:0;min-height:100vh;font:16px/1.5 system-ui,-apple-system,sans-serif;color:var(--ink);background:radial-gradient(circle at 50% 0,#22c3d4 0,var(--teal) 35%,var(--teal-d) 100%) fixed;padding:env(safe-area-inset-top) 16px 48px;overflow-x:hidden;max-width:100vw}
@@ -468,13 +468,13 @@ code{display:block;word-break:break-all;background:#fffaf0;border:2px dashed var
 ul{list-style:none;padding:0;margin:0;display:grid;grid-template-columns:minmax(0,1fr);gap:12px}
 .card{padding:12px 14px;min-width:0;overflow:hidden}
 .card .row{flex-wrap:nowrap;min-width:0}.card .row.actions{flex-wrap:wrap}.pill{flex:none}
-.card .meta{flex:1 1 auto;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.step{margin:4px 0;font-size:14px}
+.card .meta{flex:1 1 auto;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.card .meta{margin:0 0 4px}.step{flex:1 1 auto;min-width:0;font-size:14px;font-weight:600}.step.done{color:var(--s-done)}.step.processing{color:var(--s-chew)}.step.queued{color:var(--s-wait)}.step.failed{color:var(--s-err)}.step.meat{color:var(--s-meat)}
 .card h3{margin:6px 0;font-size:19px;line-height:1.25;color:var(--ink);overflow-wrap:anywhere;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;line-clamp:3;overflow:hidden}
 .card h3.url{display:block;white-space:nowrap;text-overflow:ellipsis;font-size:16px}
 .meta{color:var(--wood);font-size:14px}
 .pill{font-size:13px;font-weight:700;padding:2px 10px;border-radius:999px;border:2px solid var(--ink);background:#fff}
 .pill.done{background:var(--green);color:#fff}.pill.processing{background:var(--ember);color:#fff}.pill.queued{background:var(--gold)}.pill.failed{background:var(--red);color:#fff}.pill.meat{background:#e07a5f;color:#fff}
-.err{margin:4px 0;color:var(--red);font-size:14px;overflow-wrap:anywhere;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:4;overflow:hidden}
+.err{margin:4px 0;color:var(--s-err);font-size:14px;overflow-wrap:anywhere;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:4;overflow:hidden}
 .actions a,button.link{font:inherit;font-size:15px;font-weight:600;color:var(--teal-dd);background:none;border:0;padding:0;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
 .actions{gap:14px;margin-top:4px}.actions form{display:inline}
 button.danger{color:var(--red)}
@@ -486,7 +486,7 @@ button.danger{color:var(--red)}
 .tab .panel:first-child{margin-top:0}
 .steps{display:block;padding-left:18px;list-style:disc}.steps li{margin:4px 0}ol.steps{list-style:decimal}.lead{color:#fff;font-weight:700;font-size:17px;margin:4px 4px 14px;text-shadow:0 2px 0 rgba(0,0,0,.25)}
 code.inline{display:inline;padding:1px 4px;border-style:solid}
-@media (prefers-color-scheme:dark){html{background:#04222c}:root{--parch:#2a2f3a;--parch-d:#444b59;--ink:#f3ead6;--wood:#e8cf9f;--teal-dd:#5fd8e6}body{background:radial-gradient(circle at 50% 0,#0b6f86 0,#06485a 45%,#04222c 100%) fixed}input[type=url],input[type=text],textarea,code{background:#1d222b !important;color:var(--ink)}.pill{color:#20293c}.pill.done,.pill.processing,.pill.failed,.pill.meat{color:#fff}.btn,button.btn{border-color:#20293c;box-shadow:0 4px 0 #000}.btn.gold{color:#20293c}h1{-webkit-text-stroke-color:#20293c;text-shadow:0 4px 0 #000}.note{color:#20293c}}
+@media (prefers-color-scheme:dark){html{background:#04222c}:root{--s-err:#ff7b84;--s-done:#5fd08a;--s-chew:#ff9a4d;--s-wait:#f2c55c;--s-meat:#f0937a;--parch:#2a2f3a;--parch-d:#444b59;--ink:#f3ead6;--wood:#e8cf9f;--teal-dd:#5fd8e6}body{background:radial-gradient(circle at 50% 0,#0b6f86 0,#06485a 45%,#04222c 100%) fixed}input[type=url],input[type=text],textarea,code{background:#1d222b !important;color:var(--ink)}.pill{color:#20293c}.pill.done,.pill.processing,.pill.failed,.pill.meat{color:#fff}.btn,button.btn{border-color:#20293c;box-shadow:0 4px 0 #000}.btn.gold{color:#20293c}h1{-webkit-text-stroke-color:#20293c;text-shadow:0 4px 0 #000}.note{color:#20293c}}
 </style></head><body><main>
 <header class="hero"><img src="/${HERO}" alt="The Mimic chest, eating a pile of articles"><div><h1>${esc(title)}</h1><p id="growl">ARTICLES IN. NOISES OUT. NOISES FADE IN ${retentionDays(env)} DAYS. WORDS STAY FOREVER. OM NOM.</p></div></header>
 <nav class="tabs" role="tablist"><a href="#mouth" role="tab">🫦 MOUTH</a><a href="#abyss" role="tab">🕳️ ABYSS</a><a href="#noises" role="tab">💥 NOISES</a></nav>
