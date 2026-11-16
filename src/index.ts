@@ -362,10 +362,10 @@ function view(i: Item): View {
 	const age = Date.now() - Date.parse(i.updated ?? i.created);
 	const a = i.attempt;
 	const n = (k: number) => `${k}/${MAX_ATTEMPTS}`;
-	const gaveUp = (k: number) => (k > MAX_ATTEMPTS ? `Gave up after ${k} attempts.` : `Gave up after attempt ${n(k)}.`) + " Tap Re-chomp to start again.";
-	const stuck: View = { state: "stuck", step: "Stuck. I stopped chewing and will not try again. Tap Re-chomp." };
+	const gaveUp = (k: number) => (k > MAX_ATTEMPTS ? `Gave up after ${k} attempts.` : `Gave up after attempt ${n(k)}.`);
+	const stuck: View = { state: "stuck", step: "" };
 	if (i.status === "done") return i.gone ? { state: "meat", step: "" } : { state: "done", step: "" };
-	if (i.status === "failed") return { state: "failed", step: a ? gaveUp(a) : "Gave up. Tap Re-chomp to start again." };
+	if (i.status === "failed") return { state: "failed", step: a ? gaveUp(a) : "Gave up." };
 	if (i.status === "processing") {
 		if (age < RUN_MS) return { state: "chewing", step: `${a ? `Attempt ${n(a)}` : "Chewing"} · started ${mins(age)} ago` };
 		// The run is over, but it did not save a result: Cloudflare stopped it.
