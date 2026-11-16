@@ -442,7 +442,7 @@ function statusPage(env: Env, origin: string, items: Item[], note = ""): string 
 			// The error is from the last attempt. A new attempt clears it.
 			const error = v.reason && i.error ? `${v.reason} Before that, ${i.error}` : (v.reason ?? i.error);
 			const meta = [done && i.duration && hms(i.duration), i.words && `${i.words.toLocaleString("en-GB")} words`, i.chapters && `${i.chapters} chapters`, i.site, new Date(i.created).toLocaleDateString("en-GB", { day: "numeric", month: "short" })].filter(Boolean);
-			return `<li class="card">
+			return `<li class="card" data-k="${esc(i.id)}">
 <div class="row"><span class="pill ${cls}">${label}</span>${v.step ? `<span class="step ${cls}">${esc(v.step)}</span>` : ""}</div>
 ${i.title ? `<h3>${esc(i.title)}</h3>` : `<h3 class="url">${esc(i.url || "Some text")}</h3>`}
 ${meta.length ? `<p class="meta">${esc(meta.join(" · "))}</p>` : ""}
@@ -465,7 +465,7 @@ ${error ? `<p class="err">${esc(error)}</p>` : ""}
 <style>
 :root{--s-err:#c8323c;--s-done:#237a46;--s-chew:#b85000;--s-wait:#8a6200;--s-meat:#b4502f;--teal:#05aabe;--teal-d:#0392b4;--teal-dd:#0b5f78;--ink:#20293c;--parch:#f7e6c4;--parch-d:#e8cf9f;--wood:#6b4226;--iron:#3d4450;--gold:#f2b632;--ember:#ff7a1a;--red:#c8323c;--green:#2f9e5b}
 *{box-sizing:border-box}
-html{background:var(--teal-d);overflow-x:hidden;touch-action:pan-y;-webkit-text-size-adjust:100%;text-size-adjust:100%}
+html{background:var(--teal-d);overflow-x:hidden;overscroll-behavior-y:none;touch-action:pan-y;-webkit-text-size-adjust:100%;text-size-adjust:100%}
 body{margin:0;min-height:100vh;font:16px/1.5 system-ui,-apple-system,sans-serif;color:var(--ink);background:radial-gradient(circle at 50% 0,#22c3d4 0,var(--teal) 35%,var(--teal-d) 100%) fixed;padding:env(safe-area-inset-top) 16px 48px;overflow-x:hidden;max-width:100vw}
 main>*,section{min-width:0;max-width:100%}
 main{max-width:720px;margin:0 auto}
@@ -508,8 +508,10 @@ button.danger{color:var(--red)}
 .tab .panel:first-child{margin-top:0}
 .steps{display:block;padding-left:18px;list-style:disc}.steps li{margin:4px 0}ol.steps{list-style:decimal}.lead{color:#fff;font-weight:700;font-size:17px;margin:4px 4px 14px;text-shadow:0 2px 0 rgba(0,0,0,.25)}
 code.inline{display:inline;padding:1px 4px;border-style:solid}
+#ptr{position:fixed;z-index:9;left:50%;top:env(safe-area-inset-top);transform:translate(-50%,-60px);pointer-events:none;font:700 15px Fredoka,system-ui,sans-serif;padding:6px 14px;border-radius:999px;border:3px solid #20293c;background:#f2b632;color:#20293c;box-shadow:0 4px 0 rgba(0,0,0,.25)}
+.ease main,.ease #ptr{transition:transform .25s}
 @media (prefers-color-scheme:dark){html{background:#04222c}:root{--s-err:#ff7b84;--s-done:#5fd08a;--s-chew:#ff9a4d;--s-wait:#f2c55c;--s-meat:#f0937a;--parch:#2a2f3a;--parch-d:#444b59;--ink:#f3ead6;--wood:#e8cf9f;--teal-dd:#5fd8e6}body{background:radial-gradient(circle at 50% 0,#0b6f86 0,#06485a 45%,#04222c 100%) fixed}input[type=url],input[type=text],textarea,code{background:#1d222b !important;color:var(--ink)}.pill{color:#20293c}.pill.done,.pill.processing,.pill.failed,.pill.meat{color:#fff}.btn,button.btn{border-color:#20293c;box-shadow:0 4px 0 #000}.btn.gold{color:#20293c}h1{-webkit-text-stroke-color:#20293c;text-shadow:0 4px 0 #000}.note{color:#20293c}}
-</style></head><body><main>
+</style></head><body><div id="ptr" aria-live="polite"></div><main>
 <header class="hero"><img src="/${HERO}" alt="The Mimic chest, eating a pile of articles"><div><h1>${esc(title)}</h1><p id="growl">ARTICLES IN. NOISES OUT. NOISES FADE IN ${retentionDays(env)} DAYS. WORDS STAY FOREVER. OM NOM.</p></div></header>
 <nav class="tabs" role="tablist"><a href="#mouth" role="tab">🫦 MOUTH</a><a href="#abyss" role="tab">🕳️ ABYSS</a><a href="#noises" role="tab">💥 NOISES</a></nav>
 <section id="mouth" class="tab">
@@ -524,9 +526,9 @@ ${env.EMAIL_TO ? `<div class="panel"><h2>📧 Email</h2><ol class="steps"><li>Se
 </section>
 <section id="abyss" class="tab">
 ${note ? `<div class="panel note">${esc(note)}</div>` : ""}
-${items.length ? `<div class="panel summary"><b>${esc(summary(views))}</b></div>` : ""}
+<div id="sum">${items.length ? `<div class="panel summary"><b>${esc(summary(views))}</b></div>` : ""}</div>
 <p class="lead">Everything in my 🕳️ ABYSS. Chewed things become 💥 NOISES. NOISES fade after ${retentionDays(env)} days, but I keep the ${MEAT} (the words) FOREVER. Re-chomp the ${MEAT} to hear it again.</p>
-<ul>${rows || `<li class="card empty">My 🕳️ ABYSS is EMPTY. I AM SO HUNGRY. I could eat a WHOLE NEWSLETTER. Go to <a href="#mouth">🫦 MOUTH</a> and feed me before I eat the CSS. 🫥</li>`}</ul>
+<ul id="list">${rows || `<li class="card empty" data-k="empty">My 🕳️ ABYSS is EMPTY. I AM SO HUNGRY. I could eat a WHOLE NEWSLETTER. Go to <a href="#mouth">🫦 MOUTH</a> and feed me before I eat the CSS. 🫥</li>`}</ul>
 </section>
 <section id="noises" class="tab">
 <div class="panel"><h2>Listen to my 💥 NOISES in your podcast player</h2><p>Copy this URL. Add it to your podcast app. Keep it secret: anyone with the token in it can feed me. ANYONE.</p><code>${esc(base)}/${FEED}</code><div class="row" style="margin-top:10px">${copy("Copy NOISES URL 💥", `${base}/${FEED}`)}<a class="btn gold" href="${esc(base)}/${FEED}">Open raw XML 👀</a></div></div>
@@ -541,6 +543,26 @@ var NOMS=["OM NOM! COPIED!","GULP! IN YOUR CLIPBOARD!","CHOMP. DONE. 🦷","*BUR
 var GROWLS=["ARTICLES IN. NOISES OUT. OM NOM.","I AM A CHEST. I AM HUNGRY. THESE FACTS ARE RELATED.","FEED ME WORDS. I SPIT OUT PODCASTS. THIS IS SCIENCE.","I ATE A PAYWALL ONCE. IT WAS CRUNCHY.","NOM NOM NOM NOM NOM NOM NOM NOM.","DO NOT PUT YOUR HAND IN ME. PUT A LINK IN ME.","I HAVE TEETH WHERE MY LID SHOULD BE. WHAT OF IT.","YOU LOOK CRUNCHY. JUST AN OBSERVATION.","I DREAM OF LONGREADS. 10,000 WORDS. MMMMM."];
 var g=document.getElementById("growl");if(g&&Math.random()<0.75)g.textContent=GROWLS[Math.floor(Math.random()*GROWLS.length)];
 if(location.pathname.endsWith("/add"))history.replaceState(null,"",${JSON.stringify(`${base}/`).replace(/</g, "\\u003c")}+location.hash);
+// Live refresh: get the page again and swap in only the cards that changed.
+var HOME=${JSON.stringify(`${base}/`).replace(/</g, "\\u003c")},busy=null,last=Date.now();
+function refresh(){if(busy)return busy;busy=fetch(HOME,{cache:"no-store"}).then(function(r){if(!r.ok)throw new Error("HTTP "+r.status);return r.text()}).then(function(t){
+var d=new DOMParser().parseFromString(t,"text/html"),ul=document.getElementById("list"),nu=d.getElementById("list"),ns=d.getElementById("sum"),os=document.getElementById("sum");if(!ul||!nu)return;
+var anchor=null,top=0;if(scrollY>0)[].some.call(ul.children,function(c){var b=c.getBoundingClientRect();if(b.bottom>0){anchor=c.dataset.k;top=b.top;return true}});
+if(os&&ns&&os.innerHTML!==ns.innerHTML)os.innerHTML=ns.innerHTML;
+var old={},prev=null;[].forEach.call(ul.children,function(c){old[c.dataset.k]=c});
+[].slice.call(nu.children).forEach(function(n){var o=old[n.dataset.k];delete old[n.dataset.k];if(o){if(o.outerHTML!==n.outerHTML)o.replaceWith(n);else n=o}var at=prev?prev.nextSibling:ul.firstChild;if(n!==at)ul.insertBefore(n,at);prev=n});
+for(var k in old)old[k].remove();
+if(anchor)[].some.call(ul.children,function(c){if(c.dataset.k===anchor){scrollBy(0,c.getBoundingClientRect().top-top);return true}});
+last=Date.now()}).finally(function(){busy=null});return busy}
+setInterval(function(){if(!document.hidden)refresh().catch(function(){})},60000);
+document.addEventListener("visibilitychange",function(){if(!document.hidden&&Date.now()-last>60000)refresh().catch(function(){})});
+// Pull to refresh, for the Home Screen app (it has no reload button).
+var ptr=document.getElementById("ptr"),y0=null,pull=0,GO=70;
+function draw(text){ptr.textContent=text||(pull>=GO?"🦷 LET GO. I CHOMP.":"⬇️ PULL TO CHOMP");ptr.style.transform="translate(-50%,"+(pull-60)+"px)";document.querySelector("main").style.transform=pull?"translateY("+pull+"px)":""}
+addEventListener("touchstart",function(e){y0=!busy&&scrollY<=0&&e.touches.length===1?e.touches[0].clientY:null;document.body.classList.remove("ease")},{passive:true});
+addEventListener("touchmove",function(e){if(y0===null)return;var dy=e.touches[0].clientY-y0;pull=dy>0&&scrollY<=0?Math.min(dy*.5,110):0;draw()},{passive:true});
+addEventListener("touchend",function(){if(y0===null)return;y0=null;document.body.classList.add("ease");if(pull<GO){pull=0;draw();return}pull=56;draw("🦷 CHEWING…");
+refresh().then(function(){draw("😋 FRESH. OM NOM.")},function(e){draw("🤮 "+e.message)}).finally(function(){setTimeout(function(){pull=0;draw()},700)})});
 if("serviceWorker" in navigator)navigator.serviceWorker.register("${esc(base)}/sw.js").catch(()=>{})</script></body></html>`;
 }
 
