@@ -19,7 +19,8 @@ const UAS = [
 	"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36",
 ];
 
-export async function fetchArticle(url: string): Promise<Article> {
+/** Get an article. `pdf` turns a PDF response into an article (the caller has the AI binding). */
+export async function fetchArticle(url: string, pdf?: (bytes: ArrayBuffer, url: string) => Promise<Article>): Promise<Article> {
 	let resp: Response | undefined;
 	// Some sites block one browser identity but not another, so try each.
 	for (const ua of UAS) {
@@ -40,6 +41,7 @@ export async function fetchArticle(url: string): Promise<Article> {
 	}
 	if (!resp || !resp.ok) throw new Error(`Fetch failed: HTTP ${resp?.status} (the site may block automated requests)`);
 	const type = resp.headers.get("content-type") ?? "";
+	if (pdf && (type.includes("application/pdf") || (/\.pdf(\?|$)/i.test(url) && type.includes("octet-stream")))) return pdf(await resp.arrayBuffer(), resp.url || url);
 	if (type.includes("text/plain")) return { title: titleFromUrl(url), text: tidy(await resp.text()), site: host(url) };
 	if (!type.includes("html") && type) throw new Error(`Not a web page (${type.split(";")[0]})`);
 	return extractArticle(resp, resp.url || url);

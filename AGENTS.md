@@ -21,6 +21,7 @@ Still ask Dave before you:
 
 - Cloudflare Workers (Free plan), TypeScript, no runtime dependencies.
 - R2 bucket `podchast`: `items/<id>` (item JSON, also in `customMetadata.item`), `audio/<id>.mp3` and `parts/<id>.txt` (text of one part of a long article). Lifecycle rules delete all three prefixes after 31 days.
+- Email in: the Worker `email()` handler (`src/mail.ts` reads the MIME). Email Routing on the subdomain `podchast.dhoulb.com` sends `devour@` to the Worker. Only senders in the `EMAIL_FROM` secret are accepted. PDFs (attachments and links) become text with Workers AI `toMarkdown`.
 - `/add` takes a `url`, or `content` (text or markdown) with an optional `title`. Text is kept in `parts/<id>.txt` until its job reads it (`item.text` is set).
 - Queue `podchast-jobs`: one job per episode. The consumer gets the article, does TTS and writes the MP3. Articles over 40,000 characters (`PART_CHARS`) become several episodes ("Part 1 of 3"), one job each.
 - Cron `17 3 * * *`: deletes old items.

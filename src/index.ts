@@ -4,6 +4,7 @@ import icon180 from "../assets/icon-180.png";
 import icon192 from "../assets/icon-192.png";
 import icon512 from "../assets/icon-512.png";
 import { type Article, chunkText, fetchArticle } from "./extract";
+import { readMail } from "./mail";
 import { concat } from "./edge-tts";
 import { type Chapter, id3Tag } from "./id3";
 import { mp3Duration, speak, type TtsEnv } from "./tts";
@@ -15,6 +16,8 @@ export interface Env extends TtsEnv {
 	FEED_TITLE: string;
 	RETENTION_DAYS: string;
 	SHORTCUT_URL?: string; // iCloud link to the iOS Shortcut, shown on the status page.
+	EMAIL_TO?: string; // Address that Email Routing sends to this Worker, shown on the status page.
+	EMAIL_FROM?: string; // Secret. Sender addresses (or @domains) allowed to email Podchast, comma separated.
 }
 
 type Job = { id: string; debug?: "edge" | "workers-ai" | "extract"; url?: string; force?: boolean };
@@ -371,6 +374,7 @@ code.inline{display:inline;padding:1px 4px;border-style:solid}
 <details><summary>…or VOM A PILE OF TEXT AT ME 🤢</summary><input type="text" name="title" placeholder="Title (optional, I will guess)"><textarea name="content" rows="8" placeholder="Paste words. Markdown is fine. ## Headings become chapters. I EAT IT ALL."></textarea><button class="btn gold">🍖 DEVOUR</button></details></form></div>
 <div class="panel"><h2>📱 iPhone and iPad</h2>${shortcut}</div>
 <div class="panel"><h2>🔖 Any browser (Chrome too)</h2><ol class="steps"><li>Show your bookmarks bar. In Chrome, press <b>⌘⇧B</b>.</li><li>DRAG the button below onto the bar.</li><li>On any article, click the bookmark. The page goes in my 🫦 MOUTH.</li></ol><div class="row"><a class="btn gold" href="${esc(bookmarklet)}" onclick="event.preventDefault();this.textContent='DRAG ME. DO NOT POKE ME. 😤'">🍖 DEVOUR</a></div></div>
+${env.EMAIL_TO ? `<div class="panel"><h2>📧 Email</h2><ol class="steps"><li>Send or forward anything to <b>${esc(env.EMAIL_TO)}</b>.</li><li>A link becomes its article. Longer text becomes an episode, and the subject is its title.</li><li>Attached PDFs become episodes too. I EAT PAPER.</li></ol><div class="row">${copy("Copy email address 📧", env.EMAIL_TO)}</div></div>` : ""}
 <div class="panel"><h2>💻 Mac</h2><ol class="steps"><li>The iPhone Shortcut syncs through iCloud. In Safari, use <b>Share → 🍖 DEVOUR</b>.</li><li>Want me in your Dock? In Safari, choose <b>File → Add to Dock</b>. I will sit there. Watching. Hungry.</li></ol></div>
 <div class="panel"><h2>🤖 Android</h2><ol class="steps"><li>Open this page in Chrome.</li><li>Tap <b>Add to Home screen</b>.</li><li>Share any link to <b>Podchast</b>. I pay no rent. I eat links. OM.</li></ol></div>
 </section>
@@ -586,7 +590,7 @@ async function processJob(env: Env, job: Job, attempt: number): Promise<void> {
 
 /** Fetch the article for a new item. If it is long, queue parts 2..n as their own items and return the text for part 1. */
 async function firstPart(env: Env, item: Item): Promise<PartText> {
-	const art = item.text ? await textArticle(env, item) : await fetchArticle(item.url);
+	const art = item.text ? await textArticle(env, item) : await fetchArticle(item.url, (bytes, url) => pdfArticle(env, bytes, url));
 	item.title = art.title;
 	item.byline = art.byline;
 	item.site = art.site;
@@ -614,6 +618,23 @@ async function firstPart(env: Env, item: Item): Promise<PartText> {
 	await env.AUDIO.put(partKey(item.id), JSON.stringify(partOf(chunks[0])));
 	item.title = `${art.title} (Part 1 of ${parts})`;
 	return partOf(chunks[0]);
+}
+
+/** Turn a PDF into markdown with Workers AI (free for PDFs). Page headings are dropped, so they do not become chapters. */
+async function pdfMarkdown(env: Env, name: string, bytes: ArrayBuffer | Uint8Array): Promise<string> {
+	const res = await env.AI.toMarkdown({ name, blob: new Blob([bytes], { type: "application/pdf" }) }, { conversionOptions: { pdf: { metadata: false } } } as any);
+	if (res.format === "error") throw new Error(`Could not read the PDF: ${(res as any).error ?? "unknown error"}`);
+	return res.data
+		.split("\n")
+		.filter((l) => !/^#{1,6}\s*(Page \d+|Contents|Metadata)\s*$/i.test(l.trim()))
+		.join("\n");
+}
+
+async function pdfArticle(env: Env, bytes: ArrayBuffer, url: string): Promise<Article> {
+	const file = decodeURIComponent(new URL(url).pathname.split("/").pop() || "document.pdf");
+	const { text, headings, h1 } = markdownToSpeech(await pdfMarkdown(env, file, bytes));
+	if (!text) throw new Error("The PDF has no text I can read (it may be scanned images)");
+	return { title: h1 || file.replace(/\.pdf$/i, ""), text, headings, site: new URL(url).hostname.replace(/^www\./, "") };
 }
 
 /** Read text that was sent to /add. Markdown is made plain, and its headings become chapters. */
@@ -760,5 +781,34 @@ export default {
 				cursor = page.truncated ? page.cursor : undefined;
 			} while (cursor);
 		}
+	},
+
+	// Email to Podchast (Email Routing sends devour@ mail here). Allowed senders only.
+	async email(message, env) {
+		const from = message.from.toLowerCase();
+		const allowed = (env.EMAIL_FROM ?? "").toLowerCase().split(/[\s,]+/).filter(Boolean);
+		if (!allowed.some((a) => (a.startsWith("@") ? from.endsWith(a) : from === a))) return message.setReject("I only eat mail from my keeper. 🦷");
+		if (/dmarc=fail/i.test(message.headers.get("authentication-results") ?? "")) return message.setReject("Your mail smells forged. 🤮");
+		const raw = new TextDecoder().decode(await new Response(message.raw).arrayBuffer());
+		const mail = readMail(raw);
+		const subject = mail.subject.replace(/^((re|fwd?|fw)\s*:\s*)+/i, "").trim();
+		const added: string[] = [];
+		// Each PDF becomes an episode. Its title is the subject (one PDF) or the file name.
+		for (const pdf of mail.pdfs) {
+			const markdown = await pdfMarkdown(env, pdf.name, pdf.bytes);
+			const title = (mail.pdfs.length === 1 && subject) || pdf.name.replace(/\.pdf$/i, "");
+			const add: AddRequest = { token: "", target: null, content: markdown.trim(), title };
+			if (!addProblem(add)) added.push((await addItem(env, add)).id);
+		}
+		if (!mail.pdfs.length) {
+			// A short body with a link means "eat this link". Anything longer is the text itself.
+			const target = findUrl(mail.text);
+			const rest = mail.text.replace(/https?:\/\/\S+/g, "").trim();
+			const add: AddRequest =
+				target && rest.length < 300 ? { token: "", target, title: undefined } : { token: "", target: null, content: mail.text, title: subject || undefined };
+			if (!addProblem(add)) added.push((await addItem(env, add)).id);
+		}
+		console.log(`Email: added ${added.length} item(s) ${added.join(", ")}`);
+		if (!added.length) message.setReject("BLEH. That email had nothing I could eat. 😤");
 	},
 } satisfies ExportedHandler<Env, Job>;

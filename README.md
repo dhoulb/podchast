@@ -86,6 +86,18 @@ Add `https://podchast.<your-subdomain>.workers.dev/<TOKEN>/noises.xml` as a feed
 - **Overcast**: **+**, then **Add URL**.
 - **Pocket Casts**: Search, then paste the URL.
 
+### 7. Email in (optional)
+
+You can email or forward things to Podchast. A short email with a link adds that link. A longer email becomes an episode, and its subject is the title. Each attached PDF becomes an episode. PDF links work too.
+
+1. In Cloudflare, go to **Email Routing** for your domain. Under **Settings → Subdomains**, add a subdomain such as `podchast.example.com`. This only adds MX records to the subdomain. Mail for the root domain is not changed.
+2. Add a routing rule: `devour@podchast.example.com` → **Send to a Worker** → `podchast`.
+3. Set the Worker secret `EMAIL_FROM` to the sender addresses that may feed Podchast, comma separated. A value that starts with `@` allows a whole domain. Mail from other senders is rejected. If `EMAIL_FROM` is not set, all mail is rejected.
+   ```sh
+   npx wrangler secret put EMAIL_FROM
+   ```
+4. Set `EMAIL_TO` in `wrangler.jsonc` to your address, so the status page shows it.
+
 ## How it works
 
 1. An iOS Shortcut sends the link to `POST /<TOKEN>/add`.
