@@ -6,6 +6,8 @@
 	"compatibility_date": "2025-09-01",
 	"observability": { "enabled": true },
 	"workers_dev": true,
+	// Bundle the cover image as bytes.
+	"rules": [{ "type": "Data", "globs": ["**/*.jpg"], "fallthrough": false }],
 	"r2_buckets": [{ "binding": "AUDIO", "bucket_name": "podchast" }],
 	"queues": {
 		"producers": [{ "binding": "JOBS", "queue": "podchast-jobs" }],

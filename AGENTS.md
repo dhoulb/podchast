@@ -20,12 +20,12 @@ Still ask Dave before you:
 ## Stack
 
 - Cloudflare Workers (Free plan), TypeScript, no runtime dependencies.
-- R2 bucket `podchast`: `items/<id>` (item JSON, also in `customMetadata.item`) and `audio/<id>.mp3`. Lifecycle rules delete both prefixes after 31 days.
-- Queue `podchast-jobs`: one job per article. The consumer gets the article, does TTS and writes the MP3.
+- R2 bucket `podchast`: `items/<id>` (item JSON, also in `customMetadata.item`), `audio/<id>.mp3` and `parts/<id>.txt` (text of one part of a long article). Lifecycle rules delete all three prefixes after 31 days.
+- Queue `podchast-jobs`: one job per episode. The consumer gets the article, does TTS and writes the MP3. Articles over 40,000 characters (`PART_CHARS`) become several episodes ("Part 1 of 3"), one job each.
 - Cron `17 3 * * *`: deletes old items.
 - TTS: Microsoft Edge "Read aloud" voices over a WebSocket (`src/edge-tts.ts`, `src/edge-drm.ts`). Workers AI `@cf/deepgram/aura-2-en` is the fallback (`src/tts.ts`).
 - Article extraction: HTMLRewriter heuristics (`src/extract.ts`).
-- Routes and queue handler: `src/index.ts`. Cover art is drawn at runtime: `src/cover.ts`.
+- Routes and queue handler: `src/index.ts`. Cover art: `assets/cover.jpg` (1400x1400), bundled as bytes. Bump `?v=` in the feed when it changes, so podcast apps fetch it again.
 
 ## URLs
 
@@ -47,7 +47,7 @@ When you change `src/extract.ts`, run the harness on all `test/fixture*.html` fi
 
 ## Deploy
 
-`.github/workflows/deploy.yml` runs `wrangler deploy` on every push to `main`, with the repository secret `CLOUDFLARE_API_KEY`. It then copies the `TOKEN` repository secret to the Worker. Do not deploy by hand.
+`.github/workflows/deploy.yml` runs `wrangler deploy` on every push to `main`, with the repository secret `CLOUDFLARE_API_KEY`. It then copies the `TOKEN` repository secret to the Worker. Optional repository variables `VOICE` and `RATE` override the defaults in `wrangler.jsonc`. Do not deploy by hand.
 
 ## Limits to keep in mind
 

@@ -1,8 +1,79 @@
 # Podchast
 
-Podchast turns web articles into a private podcast. Share a link from your iPhone. A Cloudflare Worker gets the article, reads it aloud, and puts the MP3 in a podcast feed. Episodes go away after 30 days.
+Podchast turns web articles into a private podcast. Share a link from your iPhone. A Cloudflare Worker gets the article, reads it aloud, and puts the MP3 in a private podcast feed. Episodes go away after 30 days.
 
-Everything runs on Cloudflare: Workers, Queues, R2 and (as a fallback) Workers AI.
+Everything runs on Cloudflare: Workers, Queues, R2 and (as a fallback) Workers AI. The Workers Free plan is enough.
+
+## Set up your own
+
+You need a Cloudflare account, a GitHub account, Node.js 22 and an iPhone.
+
+### 1. Copy the repository
+
+Fork or clone this repository. In `wrangler.jsonc`, change `account_id` to your Cloudflare account ID (Cloudflare dashboard, then **Workers & Pages**, then the right-hand column). Delete the line if you have only one account.
+
+### 2. Make the Cloudflare resources (one time)
+
+```sh
+npm ci
+npx wrangler login
+npx wrangler r2 bucket create podchast
+npx wrangler queues create podchast-jobs
+npx wrangler r2 bucket lifecycle add podchast expire-audio audio/ --expire-days 31
+npx wrangler r2 bucket lifecycle add podchast expire-items items/ --expire-days 31
+npx wrangler r2 bucket lifecycle add podchast expire-parts parts/ --expire-days 31
+```
+
+### 3. Make a token
+
+The token is the password for your feed. It is also part of every private URL.
+
+```sh
+openssl rand -base64 24 | tr '+/' '-_'
+```
+
+Keep a copy in your password manager.
+
+### 4. Deploy
+
+**With GitHub Actions (recommended).** A push to `main` deploys the Worker. In your GitHub repository, open **Settings**, then **Secrets and variables**, then **Actions**:
+
+- Secret `CLOUDFLARE_API_KEY`: a [Cloudflare API token](https://dash.cloudflare.com/profile/api-tokens) made from the **Edit Cloudflare Workers** template.
+- Secret `TOKEN`: the token from step 3.
+- Variable `VOICE` (optional): an Edge voice name, for example `en-GB-SoniaNeural`. The default is `en-NZ-MitchellNeural`.
+- Variable `RATE` (optional): speech speed, for example `+10%`.
+
+Then push to `main`, or run the **Deploy** workflow by hand from the **Actions** tab.
+
+**By hand.**
+
+```sh
+npx wrangler secret put TOKEN     # Paste the token from step 3.
+npx wrangler deploy
+```
+
+Your Worker is now at `https://podchast.<your-subdomain>.workers.dev`. Open `https://podchast.<your-subdomain>.workers.dev/<TOKEN>` to see the status page.
+
+### 5. Make the iOS Shortcut
+
+1. Open the **Shortcuts** app. Tap **+** to make a new shortcut. Name it **Podchast**.
+2. Tap the **i** (details) button. Turn on **Show in Share Sheet**. Close the details.
+3. At the top, set **Receive** to *URLs and Safari web pages* from *Share Sheet*. Set **If there is no input** to **Get Clipboard**.
+4. Add the action **Get Contents of URL**:
+   - URL: `https://podchast.<your-subdomain>.workers.dev/<TOKEN>/add`
+   - Tap the arrow to show more. Set Method to **POST**.
+   - Request Body: **JSON**. Add a field. Key `url`, type **Text**, value **Shortcut Input**.
+   - You do not need headers. The token is in the URL.
+5. Add the action **Show Notification**. Set its text to **Contents of URL**.
+6. In Safari (or any app), tap **Share**, then **Podchast**. You see "Added to Podchast: …". The episode is ready in a few minutes.
+
+### 6. Add the feed to your podcast app
+
+Add `https://podchast.<your-subdomain>.workers.dev/<TOKEN>/feed.xml` as a feed by URL.
+
+- **Apple Podcasts**: Library, then **…**, then **Follow a Show by URL**.
+- **Overcast**: **+**, then **Add URL**.
+- **Pocket Casts**: Search, then paste the URL.
 
 ## How it works
 
@@ -11,6 +82,7 @@ Everything runs on Cloudflare: Workers, Queues, R2 and (as a fallback) Workers A
 3. The queue consumer gets the page and finds the article text (HTMLRewriter, no extra libraries).
 4. The consumer cuts the text into parts and sends each part to the TTS engine.
 5. The consumer joins the MP3 parts and writes one file to R2.
+   Articles longer than 40,000 characters (about 40 minutes) become several episodes: "Part 1 of 3", "Part 2 of 3" and so on. Each part is its own queue job.
 6. `GET /<TOKEN>/feed.xml` shows the finished items as a podcast feed.
 7. An R2 lifecycle rule deletes files after 31 days. The feed hides items after 30 days. A daily cron also deletes old files.
 
@@ -25,7 +97,7 @@ The Worker tries Edge TTS first. If Edge TTS fails three times, it uses Workers 
 
 "EdgeTTS" is the Edge "Read aloud" service. The Worker talks to it over a WebSocket, the same as the [edge-tts](https://github.com/rany2/edge-tts) Python package. The token code in `src/edge-drm.ts` is a port of edge-tts 7.3.1. If Edge TTS stops working, compare that file with the latest edge-tts `drm.py` and `constants.py`.
 
-To change the voice, set `VOICE` in `wrangler.jsonc`. Some good English voices:
+To change the voice, set the GitHub variable `VOICE` (or `VOICE` in `wrangler.jsonc`), then deploy again. Some good English voices:
 
 - `en-NZ-MitchellNeural` (default), `en-NZ-MollyNeural`
 - `en-GB-RyanNeural`, `en-GB-SoniaNeural`, `en-GB-LibbyNeural`, `en-GB-ThomasNeural`
@@ -43,57 +115,9 @@ All private URLs contain the secret `TOKEN`. Keep them private.
 | `POST /add` | The same, with the token in an `Authorization: Bearer <TOKEN>` header. |
 | `GET /<TOKEN>` | Status page. Shows all items and has a form to add a URL. |
 | `GET /<TOKEN>/feed.xml` | Podcast feed. Add this to your podcast app. |
+| `GET /<TOKEN>/cover.jpg` | Podcast artwork (`assets/cover.jpg`, 1400x1400). |
 | `GET /<TOKEN>/audio/<id>.mp3` | Episode audio (supports range requests). |
 | `POST /<TOKEN>/retry/<id>` | Try a failed item again. |
-
-## iOS Shortcut
-
-The Shortcut has two actions.
-
-1. Open the **Shortcuts** app. Tap **+** to make a new shortcut. Name it **Podchast**.
-2. Tap the **i** (details) button. Turn on **Show in Share Sheet**. Close the details.
-3. At the top, set **Receive** to *URLs and Safari web pages* from *Share Sheet*. Set **If there is no input** to **Get Clipboard**.
-4. Add the action **Get Contents of URL**:
-   - URL: `https://podchast.dhoulb.workers.dev/<TOKEN>/add`
-   - Tap the arrow to show more. Set Method to **POST**.
-   - Request Body: **JSON**. Add a field. Key `url`, type **Text**, value **Shortcut Input**.
-   - You do not need headers. The token is in the URL.
-5. Add the action **Show Notification**. Set its text to **Contents of URL**.
-6. In Safari (or any app), tap **Share**, then **Podchast**. You see "Added to Podchast: …". The episode is ready in a few minutes.
-
-The reply is plain text. Errors are plain text too, for example "wrong or missing token".
-
-## Podcast app
-
-Add `https://podchast.dhoulb.workers.dev/<TOKEN>/feed.xml` as a feed by URL.
-
-- **Apple Podcasts**: Library, then **…**, then **Follow a Show by URL**.
-- **Overcast**: **+**, then **Add URL**.
-- **Pocket Casts**: Search, then paste the URL.
-
-## Deploy
-
-GitHub Actions deploys the Worker when a commit lands on `main` (`.github/workflows/deploy.yml`). Pull requests only run the type check. The workflow uses the repository secret `CLOUDFLARE_API_KEY` (a Cloudflare API token that can edit Workers, Queues and R2). It then copies the repository secret `TOKEN` to the Worker. To change the token, change that secret and run the workflow again.
-
-To deploy by hand:
-
-You need Node.js and a Cloudflare account. The Free plan works.
-
-```sh
-npm install
-npx wrangler login
-npx wrangler r2 bucket create podchast
-npx wrangler queues create podchast-jobs
-npx wrangler secret put TOKEN        # Use a long random value.
-npx wrangler deploy
-```
-
-Add the R2 lifecycle rules (one time):
-
-```sh
-npx wrangler r2 bucket lifecycle add podchast expire-audio audio/ --expire-days 31
-npx wrangler r2 bucket lifecycle add podchast expire-items items/ --expire-days 31
-```
 
 ## Develop
 
@@ -112,5 +136,5 @@ curl -X POST --data-binary @fixture.html http://127.0.0.1:8799/
 ## Limits
 
 - The extractor is a simple heuristic. Most news sites and blogs work. Pages that need JavaScript or a login do not work.
-- On the Workers Free plan, one job can make 50 outbound requests. Each 3,000-character part uses one request, so the limit is about 130,000 characters (about 20,000 words) for each article.
+- On the Workers Free plan, one job can make 50 outbound requests. Long articles are split into episodes of about 40,000 characters, so there is no length limit.
 - Retention is set by `RETENTION_DAYS` (default 30) and the R2 lifecycle rules.

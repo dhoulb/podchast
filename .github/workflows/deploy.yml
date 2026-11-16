@@ -35,9 +35,17 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npx wrangler deploy
+      # Optional repository variables VOICE and RATE override the defaults in wrangler.jsonc.
+      - name: Deploy
+        run: |
+          args=()
+          [ -n "$VOICE" ] && args+=(--var "VOICE:$VOICE")
+          [ -n "$RATE" ] && args+=(--var "RATE:$RATE")
+          npx wrangler deploy "${args[@]}"
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_KEY }}
+          VOICE: ${{ vars.VOICE }}
+          RATE: ${{ vars.RATE }}
       # Sync the feed token from the TOKEN repo secret. Skipped if the secret is not set.
       - name: Set TOKEN secret
         if: env.HAS_TOKEN == 'true'
