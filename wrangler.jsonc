@@ -16,7 +16,7 @@
 	"ai": { "binding": "AI" },
 	"triggers": { "crons": ["17 3 * * *"] },
 	"vars": {
-		"FEED_TITLE": "🪎 PODCHAST NOISES",
+		"FEED_TITLE": "🍖 PODCHAST",
 		"RETENTION_DAYS": "30",
 		// Edge TTS voice. List: https://speech.platform.bing.com/consumer/speech/synthesize/readaloud/voices/list?trustedclienttoken=6A5AA1D4EAFF4E9FB37E23D68491D6F4
 		"VOICE": "en-NZ-MitchellNeural",
