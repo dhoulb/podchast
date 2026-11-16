@@ -369,7 +369,7 @@ function view(i: Item): View {
 	if (i.status === "processing") {
 		if (age < RUN_MS) return { state: "chewing", step: `${a ? `Attempt ${n(a)}` : "Chewing"} · started ${mins(age)} ago` };
 		// The run is over, but it did not save a result: Cloudflare stopped it.
-		const reason = "Cloudflare stopped it (too much work).";
+		const reason = "Cloudflare: exceededCpu";
 		if (a && a >= MAX_ATTEMPTS) return { state: "failed", step: gaveUp(a), reason };
 		if (!a || age > STUCK_MS) return { ...stuck, reason };
 		return { state: "waiting", step: `Attempt ${n(a)} was stopped. Attempt ${n(a + 1)} soon.`, reason };
@@ -418,13 +418,13 @@ function statusPage(env: Env, origin: string, items: Item[], note = ""): string 
 			const [cls, label] = LABEL[v.state];
 			const done = v.state === "done" || v.state === "meat";
 			// The error is from the last attempt. A new attempt clears it.
-			const error = v.reason && i.error ? `${v.reason} Before that: ${i.error}` : (v.reason ?? i.error);
+			const error = v.reason && i.error ? `${v.reason} Before that, ${i.error}` : (v.reason ?? i.error);
 			const meta = [done && i.duration && hms(i.duration), i.words && `${i.words.toLocaleString("en-GB")} words`, i.chapters && `${i.chapters} chapters`, i.site, new Date(i.created).toLocaleDateString("en-GB", { day: "numeric", month: "short" })].filter(Boolean);
 			return `<li class="card">
 <div class="row"><span class="pill ${cls}">${label}</span><span class="meta">${esc(meta.join(" · "))}</span></div>
 ${v.step ? `<p class="step">${esc(v.step)}</p>` : ""}
 ${i.title ? `<h3>${esc(i.title)}</h3>` : `<h3 class="url">${esc(i.url || "Some text")}</h3>`}
-${error && !done ? `<p class="err">${v.state === "chewing" ? "Last attempt: " : "What went wrong: "}${esc(error)}</p>` : ""}${error && done ? `<p class="err">${esc(error)}</p>` : ""}
+${error ? `<p class="err">${esc(error)}</p>` : ""}
 <div class="row actions">${i.saved ? `<a href="${esc(`${base}/read/${rootId(i.id)}`)}">Read</a>` : ""}${i.status === "done" && !i.gone ? `<a href="${esc(`${base}/audio/${i.id}.mp3`)}">Play</a>` : ""}${i.url ? `<a href="${esc(i.url)}">Source</a>` : ""}${i.pdf ? `<a href="${esc(`${base}/read/${rootId(i.id)}.pdf`)}">PDF</a>` : ""}${v.state !== "chewing" && v.state !== "waiting" ? `<form method="post" action="${esc(`${base}/retry/${i.id}`)}"><button class="link">Re-chomp</button></form>` : ""}
 <form method="post" action="${esc(`${base}/delete/${i.id}`)}" onsubmit="return confirm('DELETE this one? Forever? No take-backs??')"><button class="link danger">Delete</button></form></div>
 </li>`;
@@ -801,7 +801,7 @@ async function processJob(env: Env, job: Job, attempt: number): Promise<void> {
 	if (!item || (item.status === "done" && !job.force)) return;
 	// A run that Cloudflare stops (too much CPU) cannot save an error. The next attempt finds it still "processing".
 	const stopped = item.status === "processing" && item.attempt !== undefined && item.attempt < attempt;
-	item.error = stopped ? `Cloudflare stopped attempt ${item.attempt}/${MAX_ATTEMPTS} (too much work).` : undefined;
+	item.error = stopped ? `Cloudflare: exceededCpu (attempt ${item.attempt}/${MAX_ATTEMPTS})` : undefined;
 	item.status = "processing";
 	item.attempt = attempt;
 	item.retryAt = undefined;
@@ -916,7 +916,7 @@ async function firstPart(env: Env, item: Item, again = false): Promise<PartText>
 /** Turn a PDF into markdown with Workers AI (free for PDFs). Page headings are dropped, so they do not become chapters. */
 async function pdfMarkdown(env: Env, name: string, bytes: ArrayBuffer | Uint8Array): Promise<string> {
 	const res = await env.AI.toMarkdown({ name, blob: new Blob([bytes], { type: "application/pdf" }) }, { conversionOptions: { pdf: { metadata: false } } } as any);
-	if (res.format === "error") throw new Error(`Could not read the PDF: ${(res as any).error ?? "unknown error"}`);
+	if (res.format === "error") throw new Error(`Workers AI toMarkdown: ${(res as any).error ?? "format error"}`);
 	return res.data
 		.split("\n")
 		.filter((l) => !/^#{1,6}\s*(Page \d+|Contents|Metadata)\s*$/i.test(l.trim()))
@@ -926,7 +926,7 @@ async function pdfMarkdown(env: Env, name: string, bytes: ArrayBuffer | Uint8Arr
 async function pdfArticle(env: Env, bytes: ArrayBuffer, url: string): Promise<Article> {
 	const file = decodeURIComponent(new URL(url).pathname.split("/").pop() || "document.pdf");
 	const { text, headings, h1 } = markdownToSpeech(await pdfMarkdown(env, file, bytes));
-	if (!text) throw new Error("The PDF has no text I can read (it may be scanned images)");
+	if (!text) throw new Error("Podchast: PDF has no text (it may be scanned images)");
 	return { title: h1 || file.replace(/\.pdf$/i, ""), text, headings, site: new URL(url).hostname.replace(/^www\./, "") };
 }
 
@@ -934,9 +934,9 @@ async function pdfArticle(env: Env, bytes: ArrayBuffer, url: string): Promise<Ar
 async function textArticle(env: Env, item: Item): Promise<Article> {
 	// Older items kept their text in parts/ until the job read it.
 	const obj = (await env.AUDIO.get(readKey(item.id))) ?? (await env.AUDIO.get(partKey(item.id)));
-	if (!obj) throw new Error("The text is missing");
+	if (!obj) throw new Error("Podchast: the saved text is missing");
 	const { text, headings, h1 } = markdownToSpeech(await obj.text());
-	if (!text) throw new Error("The text was empty after I took out the markdown");
+	if (!text) throw new Error("Podchast: the text was empty after I took out the markdown");
 	const title = item.title?.replace(/ \(Part \d+ of \d+\)$/, "") || h1 || text.split("\n")[0].slice(0, 80).replace(/\s+\S*$/, "") + (text.length > 80 ? "…" : "");
 	return { title, text, headings, site: item.url ? new URL(item.url).hostname.replace(/^www\./, "") : undefined };
 }
@@ -1017,7 +1017,7 @@ function markdownToSpeech(md: string): { text: string; headings: string[]; h1?: 
 
 async function partText(env: Env, item: Item): Promise<PartText> {
 	const obj = await env.AUDIO.get(partKey(item.id));
-	if (!obj) throw new Error(`Text for part ${item.part} is missing`);
+	if (!obj) throw new Error(`Podchast: the text for part ${item.part} is missing`);
 	const raw = await obj.text();
 	try {
 		return JSON.parse(raw) as PartText;
