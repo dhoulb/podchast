@@ -57,7 +57,7 @@ Your Worker is now at `https://podchast.<your-subdomain>.workers.dev`. Open `htt
 
 ### 5. Add the iOS Shortcut
 
-**Quick way:** open your status page on your iPhone. Tap **Copy my mouth URL**, then **Put me in your share sheet**. Paste the URL when Shortcuts asks for it. (The button opens [this shared Shortcut](https://www.icloud.com/shortcuts/0f622097bb4a45f980ae39ba117be47b).)
+**Quick way:** open your status page on your iPhone. Tap **Copy MOUTH URL** on the 👄 MOUTH tab, then **Add to share sheet**. Paste the URL when Shortcuts asks for it. (The button opens [this shared Shortcut](https://www.icloud.com/shortcuts/0f622097bb4a45f980ae39ba117be47b).)
 
 **Or make it yourself:**
 
