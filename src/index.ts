@@ -20,8 +20,8 @@ export interface Env extends TtsEnv {
 	EMAIL_FROM?: string; // Secret. Sender addresses (or @domains) allowed to email Podchast, comma separated.
 }
 
-// Debug jobs: "edge" and "workers-ai" speak `text` (or a test sentence) into debug/<id>.mp3. EDGE_FORMAT and EDGE_PAUSE_MS can be set for one job.
-type Job = { id: string; debug?: "edge" | "workers-ai" | "extract"; url?: string; force?: boolean; text?: string; format?: string; pause?: number };
+// Debug jobs: "edge" and "workers-ai" speak `text` (or a test sentence) into debug/<id>.mp3. The voice, EDGE_FORMAT and EDGE_PAUSE_MS can be set for one job.
+type Job = { id: string; debug?: "edge" | "workers-ai" | "extract"; url?: string; force?: boolean; text?: string; format?: string; pause?: number; voice?: string };
 
 type Status = "queued" | "processing" | "done" | "failed";
 type Item = {
@@ -636,11 +636,12 @@ async function debugJob(env: Env, job: Job): Promise<void> {
 	const engine = job.debug as "edge" | "workers-ai";
 	const name = /^[\w-]{1,40}$/.test(job.id) ? job.id : engine;
 	const start = Date.now();
-	const report: Record<string, unknown> = { engine, format: job.format, pause: job.pause, at: new Date().toISOString() };
+	const report: Record<string, unknown> = { engine, voice: job.voice, format: job.format, pause: job.pause, at: new Date().toISOString() };
 	try {
 		const tts = { ...env, TTS_ENGINE: engine === "edge" ? "edge-only" : "workers-ai" };
 		if (job.format) tts.EDGE_FORMAT = job.format;
 		if (job.pause !== undefined) tts.EDGE_PAUSE_MS = String(job.pause);
+		if (job.voice && /^[\w-]+$/.test(job.voice)) tts.VOICE = job.voice;
 		const { mp3, engine: used } = await speak(tts, job.text || "Hello. This is a test of Podchast, running on Cloudflare.");
 		await env.AUDIO.put(`debug/${name}.mp3`, mp3, { httpMetadata: { contentType: "audio/mpeg" } });
 		// The first MP3 frame header: bytes 1 and 2 hold the bitrate and sample rate.
