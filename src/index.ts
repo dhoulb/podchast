@@ -1,4 +1,5 @@
 import cover from "../assets/cover.jpg";
+import hero from "../assets/hero.jpg";
 import icon180 from "../assets/icon-180.png";
 import icon192 from "../assets/icon-192.png";
 import icon512 from "../assets/icon-512.png";
@@ -264,7 +265,8 @@ ${entries}
 
 
 // Change the file name when the artwork changes, so podcast apps fetch it again.
-const COVER = "cover-v4.jpg";
+const COVER = "cover-v5.jpg";
+const HERO = "hero-v1.jpg";
 const coverResponse = () => new Response(cover, { headers: { "Content-Type": "image/jpeg", "Content-Length": String(cover.byteLength), "Cache-Control": "public, max-age=604800" } });
 
 // The feed description. A new one on every fetch. OM NOM.
@@ -322,8 +324,9 @@ ${i.error ? `<p class="err">${esc(i.error)}</p>` : ""}
 html{background:var(--teal-d)}
 body{margin:0;min-height:100vh;font:16px/1.5 system-ui,-apple-system,sans-serif;color:var(--ink);background:radial-gradient(circle at 50% 0,#22c3d4 0,var(--teal) 35%,var(--teal-d) 100%) fixed;padding:env(safe-area-inset-top) 16px 48px}
 main{max-width:720px;margin:0 auto}
-header{display:flex;align-items:center;gap:16px;padding:24px 0 16px}
-header img{width:84px;height:84px;border-radius:20px;border:4px solid var(--iron);box-shadow:0 6px 0 rgba(0,0,0,.25)}
+header.hero{position:relative;margin:16px 0;border:4px solid var(--iron);border-radius:22px;overflow:hidden;box-shadow:0 6px 0 rgba(0,0,0,.25);background:#2a1a10}
+header.hero img{display:block;width:100%;aspect-ratio:1400/764;object-fit:cover}
+header.hero>div{position:absolute;left:0;right:0;bottom:0;padding:48px 16px 14px;background:linear-gradient(transparent,rgba(20,10,4,.9))}
 h1,h2,h3,.btn,.pill{font-family:Fredoka,system-ui,sans-serif}
 h1{margin:0;font-size:44px;line-height:1;color:#fff;letter-spacing:1px;-webkit-text-stroke:2px var(--ink);paint-order:stroke fill;text-shadow:0 4px 0 var(--ink)}
 header p{margin:6px 0 0;color:#e9fbff;font-weight:600}
@@ -359,7 +362,7 @@ button.danger{color:var(--red)}
 code.inline{display:inline;padding:1px 4px;border-style:solid}
 @media (prefers-color-scheme:dark){html{background:#04222c}:root{--parch:#2a2f3a;--parch-d:#444b59;--ink:#f3ead6;--wood:#e8cf9f;--teal-dd:#5fd8e6}body{background:radial-gradient(circle at 50% 0,#0b6f86 0,#06485a 45%,#04222c 100%) fixed}input[type=url],input[type=text],textarea,code{background:#1d222b !important;color:var(--ink)}.pill{color:#20293c}.pill.done,.pill.processing,.pill.failed{color:#fff}.btn,button.btn{border-color:#20293c;box-shadow:0 4px 0 #000}.btn.gold{color:#20293c}h1{-webkit-text-stroke-color:#20293c;text-shadow:0 4px 0 #000}.note{color:#20293c}}
 </style></head><body><main>
-<header><img src="${esc(base)}/icon-192.png" alt=""><div><h1>${esc(title)}</h1><p id="growl">ARTICLES IN. NOISES OUT. EVERYTHING EATEN AGAIN IN ${Number(env.RETENTION_DAYS) || 30} DAYS. OM NOM.</p></div></header>
+<header class="hero"><img src="/${HERO}" alt="The Mimic chest, eating a pile of articles"><div><h1>${esc(title)}</h1><p id="growl">ARTICLES IN. NOISES OUT. EVERYTHING EATEN AGAIN IN ${Number(env.RETENTION_DAYS) || 30} DAYS. OM NOM.</p></div></header>
 <nav class="tabs" role="tablist"><a href="#mouth" role="tab">👄 MOUTH</a><a href="#guts" role="tab">🫀 GUTS</a><a href="#noises" role="tab">🔊 NOISES</a></nav>
 <section id="mouth" class="tab">
 <p class="lead">Feed things into my 👄 MOUTH. I store them in my 🫀 GUTS. Then you hear the 🔊 NOISES. OM NOM.</p>
@@ -427,6 +430,7 @@ async function handleFetch(req: Request, env: Env): Promise<Response> {
 	// Everything else lives under /<token>/...
 	// The artwork is public, with no token and no query string, so podcast apps' image servers can fetch it.
 	if (url.pathname === `/${COVER}`) return coverResponse();
+	if (url.pathname === `/${HERO}`) return new Response(hero, { headers: { "Content-Type": "image/jpeg", "Cache-Control": "public, max-age=31536000, immutable" } });
 	if (!parts.length || !safeEqual(parts[0], env.TOKEN)) return new Response("Not found", { status: 404 });
 	const [, a, b] = parts;
 	if (!a) return html(statusPage(env, url.origin, await listItems(env)));

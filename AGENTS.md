@@ -26,7 +26,7 @@ Still ask Dave before you:
 - Cron `17 3 * * *`: deletes old items.
 - TTS: Microsoft Edge "Read aloud" voices over a WebSocket (`src/edge-tts.ts`, `src/edge-drm.ts`). Workers AI `@cf/deepgram/aura-2-en` is the fallback (`src/tts.ts`).
 - Article extraction: HTMLRewriter heuristics (`src/extract.ts`).
-- Routes and queue handler: `src/index.ts`. Chapter tags: `src/id3.ts`. Cover art: `assets/cover.jpg` (1400x1400) and web app icons `assets/icon-*.png`, bundled as bytes. The feed links to the public `/cover-v4.jpg`. Change `COVER` in `src/index.ts` when the art changes, so podcast apps fetch it again.
+- Routes and queue handler: `src/index.ts`. Chapter tags: `src/id3.ts`. Cover art: `assets/cover.jpg` (1400x1400) and web app icons `assets/icon-*.png`, bundled as bytes. The feed links to the public `/cover-v5.jpg`. Change `COVER` in `src/index.ts` when the art changes, so podcast apps fetch it again.
 
 ## URLs
 

@@ -129,7 +129,7 @@ All private URLs contain the secret `TOKEN`. Keep them private.
 | `POST /add` | The same, with the token in an `Authorization: Bearer <TOKEN>` header. |
 | `GET /<TOKEN>` | Status page. Shows all items and has a form to add a URL or paste text. |
 | `GET /<TOKEN>/feed.xml` | Podcast feed. Add this to your podcast app. |
-| `GET /cover-v4.jpg` | Podcast artwork (`assets/cover.jpg`, 1400x1400). Public, so podcast apps can fetch it. |
+| `GET /cover-v5.jpg` | Podcast artwork (`assets/cover.jpg`, 1400x1400). Public, so podcast apps can fetch it. |
 | `GET /<TOKEN>/audio/<id>.mp3` | Episode audio (supports range requests). |
 | `POST /<TOKEN>/retry/<id>` | Try a failed item again. |
 | `POST /<TOKEN>/delete/<id>` | Delete an episode (the status page has a button). |
