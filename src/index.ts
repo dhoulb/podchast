@@ -369,7 +369,7 @@ function view(i: Item): View {
 	if (i.status === "processing") {
 		if (age < RUN_MS) return { state: "chewing", step: `${a ? `Attempt ${n(a)}` : "Chewing"} · started ${mins(age)} ago` };
 		// The run is over, but it did not save a result: Cloudflare stopped it.
-		const reason = "Cloudflare: stopped the run. It used more CPU time than the Free plan allows.";
+		const reason = "Cloudflare: exceededCpu";
 		if (a && a >= MAX_ATTEMPTS) return { state: "failed", step: gaveUp(a), reason };
 		if (!a || age > STUCK_MS) return { ...stuck, reason };
 		return { state: "waiting", step: `Attempt ${n(a)} was stopped. Attempt ${n(a + 1)} soon.`, reason };
@@ -801,7 +801,7 @@ async function processJob(env: Env, job: Job, attempt: number): Promise<void> {
 	if (!item || (item.status === "done" && !job.force)) return;
 	// A run that Cloudflare stops (too much CPU) cannot save an error. The next attempt finds it still "processing".
 	const stopped = item.status === "processing" && item.attempt !== undefined && item.attempt < attempt;
-	item.error = stopped ? `Cloudflare: stopped attempt ${item.attempt}/${MAX_ATTEMPTS}. It used more CPU time than the Free plan allows.` : undefined;
+	item.error = stopped ? `Cloudflare: exceededCpu (attempt ${item.attempt}/${MAX_ATTEMPTS})` : undefined;
 	item.status = "processing";
 	item.attempt = attempt;
 	item.retryAt = undefined;
@@ -916,7 +916,7 @@ async function firstPart(env: Env, item: Item, again = false): Promise<PartText>
 /** Turn a PDF into markdown with Workers AI (free for PDFs). Page headings are dropped, so they do not become chapters. */
 async function pdfMarkdown(env: Env, name: string, bytes: ArrayBuffer | Uint8Array): Promise<string> {
 	const res = await env.AI.toMarkdown({ name, blob: new Blob([bytes], { type: "application/pdf" }) }, { conversionOptions: { pdf: { metadata: false } } } as any);
-	if (res.format === "error") throw new Error(`PDF: could not read it (${(res as any).error ?? "unknown error"})`);
+	if (res.format === "error") throw new Error(`Workers AI toMarkdown: ${(res as any).error ?? "format error"}`);
 	return res.data
 		.split("\n")
 		.filter((l) => !/^#{1,6}\s*(Page \d+|Contents|Metadata)\s*$/i.test(l.trim()))
@@ -926,7 +926,7 @@ async function pdfMarkdown(env: Env, name: string, bytes: ArrayBuffer | Uint8Arr
 async function pdfArticle(env: Env, bytes: ArrayBuffer, url: string): Promise<Article> {
 	const file = decodeURIComponent(new URL(url).pathname.split("/").pop() || "document.pdf");
 	const { text, headings, h1 } = markdownToSpeech(await pdfMarkdown(env, file, bytes));
-	if (!text) throw new Error("PDF: no text I can read (it may be scanned images)");
+	if (!text) throw new Error("Podchast: PDF has no text (it may be scanned images)");
 	return { title: h1 || file.replace(/\.pdf$/i, ""), text, headings, site: new URL(url).hostname.replace(/^www\./, "") };
 }
 
