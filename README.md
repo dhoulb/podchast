@@ -42,6 +42,7 @@ Keep a copy in your password manager.
 - Secret `TOKEN`: the token from step 3.
 - Variable `VOICE` (optional): an Edge voice name, for example `en-GB-SoniaNeural`. The default is `en-NZ-MitchellNeural`.
 - Variable `RATE` (optional): speech speed, for example `+10%`.
+- Variable `SHORTCUT_URL` (optional): an iCloud link to your iOS Shortcut. The status page then shows an **Add to share sheet** button.
 
 Then push to `main`, or run the **Deploy** workflow by hand from the **Actions** tab.
 
@@ -67,6 +68,14 @@ Your Worker is now at `https://podchast.<your-subdomain>.workers.dev`. Open `htt
 5. Add the action **Show Notification**. Set its text to **Contents of URL**.
 6. In Safari (or any app), tap **Share**, then **Podchast**. You see "Added to Podchast: …". The episode is ready in a few minutes.
 
+If someone already shared a Podchast Shortcut link with you, use it instead. Open your status page, tap **Copy my add URL**, then open the link. Paste your add URL when Shortcuts asks for it.
+
+To share your own Shortcut: in the Shortcut, tap **i**, then **Setup**, and add an **Import Question** for the URL. Then long-press the Shortcut and tap **Share**, then **Copy iCloud Link**. The Import Question removes your token from the shared copy.
+
+**Android:** open the status page in Chrome and tap **Add to Home screen**. Podchast then shows in the Android share menu.
+
+**Mac:** Shortcuts sync through iCloud. The Podchast Shortcut shows in the **Share** menu in Safari on your Mac too.
+
 ### 6. Add the feed to your podcast app
 
 Add `https://podchast.<your-subdomain>.workers.dev/<TOKEN>/feed.xml` as a feed by URL.
@@ -82,9 +91,11 @@ Add `https://podchast.<your-subdomain>.workers.dev/<TOKEN>/feed.xml` as a feed b
 3. The queue consumer gets the page and finds the article text (HTMLRewriter, no extra libraries).
 4. The consumer cuts the text into parts and sends each part to the TTS engine.
 5. The consumer joins the MP3 parts and writes one file to R2.
+   Article headings become chapters (ID3 `CHAP` frames in the MP3).
    Articles longer than 40,000 characters (about 40 minutes) become several episodes: "Part 1 of 3", "Part 2 of 3" and so on. Each part is its own queue job.
 6. `GET /<TOKEN>/feed.xml` shows the finished items as a podcast feed.
-7. An R2 lifecycle rule deletes files after 31 days. The feed hides items after 30 days. A daily cron also deletes old files.
+7. If an article fails three times, the feed gets a short "Failed: …" episode. Its notes give the reason.
+8. An R2 lifecycle rule deletes files after 31 days. The feed hides items after 30 days. A daily cron also deletes old files.
 
 ## TTS engine
 
@@ -118,6 +129,8 @@ All private URLs contain the secret `TOKEN`. Keep them private.
 | `GET /<TOKEN>/cover.jpg` | Podcast artwork (`assets/cover.jpg`, 1400x1400). |
 | `GET /<TOKEN>/audio/<id>.mp3` | Episode audio (supports range requests). |
 | `POST /<TOKEN>/retry/<id>` | Try a failed item again. |
+| `POST /<TOKEN>/delete/<id>` | Delete an episode (the status page has a button). |
+| `GET /<TOKEN>/manifest.webmanifest` | Web app manifest. Makes the status page a Home Screen app, and an Android share target. |
 
 ## Develop
 

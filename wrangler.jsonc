@@ -7,7 +7,7 @@
 	"observability": { "enabled": true },
 	"workers_dev": true,
 	// Bundle the cover image as bytes.
-	"rules": [{ "type": "Data", "globs": ["**/*.jpg"], "fallthrough": false }],
+	"rules": [{ "type": "Data", "globs": ["**/*.jpg", "**/*.png"], "fallthrough": false }],
 	"r2_buckets": [{ "binding": "AUDIO", "bucket_name": "podchast" }],
 	"queues": {
 		"producers": [{ "binding": "JOBS", "queue": "podchast-jobs" }],
@@ -24,7 +24,9 @@
 		// "edge" (default, falls back to Workers AI) or "workers-ai".
 		"TTS_ENGINE": "edge",
 		"AI_MODEL": "@cf/deepgram/aura-2-en",
-		"AI_SPEAKER": ""
+		"AI_SPEAKER": "",
+		// iCloud link to the iOS Shortcut. Shows an "Add to share sheet" button on the status page.
+		"SHORTCUT_URL": ""
 	}
 	// Secret: TOKEN (run `npx wrangler secret put TOKEN`).
 }
