@@ -26,6 +26,8 @@ jobs:
     needs: check
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    env:
+      HAS_TOKEN: ${{ secrets.TOKEN != '' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -35,4 +37,11 @@ jobs:
       - run: npm ci
       - run: npx wrangler deploy
         env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_KEY }}
+      # Sync the feed token from the TOKEN repo secret. Skipped if the secret is not set.
+      - name: Set TOKEN secret
+        if: env.HAS_TOKEN == 'true'
+        run: printf '%s' "$TOKEN" | npx wrangler secret put TOKEN
+        env:
+          TOKEN: ${{ secrets.TOKEN }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_KEY }}

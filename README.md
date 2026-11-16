@@ -72,7 +72,7 @@ Add `https://podchast.dhoulb.workers.dev/<TOKEN>/feed.xml` as a feed by URL.
 
 ## Deploy
 
-GitHub Actions deploys the Worker when a commit lands on `main` (`.github/workflows/deploy.yml`). Pull requests only run the type check. The workflow uses the repository secret `CLOUDFLARE_API_KEY` (a Cloudflare API token that can edit Workers, Queues and R2).
+GitHub Actions deploys the Worker when a commit lands on `main` (`.github/workflows/deploy.yml`). Pull requests only run the type check. The workflow uses the repository secret `CLOUDFLARE_API_KEY` (a Cloudflare API token that can edit Workers, Queues and R2). It then copies the repository secret `TOKEN` to the Worker. To change the token, change that secret and run the workflow again.
 
 To deploy by hand:
 
