@@ -290,7 +290,7 @@ function growl(days: number): string {
 	return `${line} Anything you do not listen to in ${days} days, I EAT AGAIN. FOREVER. NO TAKEBACKS. 🦷📜💥`;
 }
 
-const STATUS_LABEL: Record<Status, string> = { queued: "😋 In my mouth", processing: "🦷 CHEWING", done: "💥 Burped out", failed: "🤮 Spat out" };
+const STATUS_LABEL: Record<Status, string> = { queued: "🫦 MOUTH", processing: "🦷 CHEWING", done: "💥 NOISE", failed: "🤮 SPAT OUT" };
 
 function statusPage(env: Env, origin: string, items: Item[], note = ""): string {
 	const base = `${origin}/${env.TOKEN}`;
