@@ -189,19 +189,19 @@ function feedXml(env: Env, origin: string, items: Item[]): string {
 		.map((i) => {
 			const failed = i.status === "failed";
 			const article = i.title ?? i.url;
-			const name = failed ? `Failed: ${article}` : i.site ? `${i.title} (${i.site})` : article;
+			const name = failed ? `🤮 SPAT OUT: ${article}` : i.site ? `${i.title} (${i.site})` : article;
 			const facts = failed
 				? []
 				: [i.words && `${i.words.toLocaleString("en-GB")} words`, i.duration && `${Math.round(i.duration / 60)} min`, i.chapters && `${i.chapters} chapters`].filter(Boolean);
 			const notes = failed
-				? [`<p>Podchast could not read this article.</p>`, `<p>Reason: ${esc(i.error ?? "unknown")}</p>`, `<p><a href="${esc(i.url)}">Open the article</a></p>`, `<p>Share the link again to retry.</p>`]
+				? [`<p>BLEURGH. I CHOMPED this article and it tasted like RUSTY NAILS. I SPAT IT OUT. 🤮</p>`, `<p>What got stuck in my teeth: ${esc(i.error ?? "a mystery bone")}</p>`, `<p><a href="${esc(i.url)}">Look at the thing I could not eat</a></p>`, `<p>Share the link again to retry.</p>`]
 				: [
 						i.excerpt && `<p>${esc(i.excerpt)}</p>`,
 						i.byline && `<p>By ${esc(i.byline)}.</p>`,
 						`<p><a href="${esc(i.url)}">Read the article</a>${i.site ? ` on ${esc(i.site)}` : ""}</p>`,
 						facts.length && `<p>${esc(facts.join(" · "))}</p>`,
 					].filter(Boolean);
-			const plain = failed ? `Podchast could not read this article. Reason: ${i.error ?? "unknown"}. ${i.url}` : [i.excerpt, i.byline && `By ${i.byline}.`, `Source: ${i.url}`, facts.join(" · ")].filter(Boolean).join("\n\n");
+			const plain = failed ? `BLEURGH! I could not eat this article. Stuck in my teeth: ${i.error ?? "a mystery bone"}. ${i.url}` : [i.excerpt, i.byline && `By ${i.byline}.`, `Source: ${i.url}`, facts.join(" · ")].filter(Boolean).join("\n\n");
 			const audio = failed ? `${base}/audio/${FAILED_ID}.mp3?for=${i.id}` : `${base}/audio/${i.id}.mp3`;
 			return `<item>
 <title>${esc(name)}</title>
@@ -224,7 +224,7 @@ ${i.byline ? `<itunes:author>${esc(i.byline)}</itunes:author>` : ""}
 <title>${esc(title)}</title>
 <link>${esc(base)}</link>
 <atom:link href="${esc(`${base}/feed.xml`)}" rel="self" type="application/rss+xml"/>
-<description>Articles read aloud. Episodes disappear after ${Number(env.RETENTION_DAYS) || 30} days.</description>
+<description>OM NOM NOM. I am THE MIMIC. I am a CHEST. I am HUNGRY. You feed me ARTICLES, I CHEW them into AUDIO and SPIT them into your EARS. Anything you do not listen to in ${Number(env.RETENTION_DAYS) || 30} days, I EAT AGAIN. FOREVER. NO TAKEBACKS. FEED ME. 🦷📜🔊</description>
 <language>en</language>
 <itunes:author>${esc(title)}</itunes:author>
 <itunes:image href="${esc(`${base}/cover.jpg?v=3`)}"/>
@@ -237,7 +237,7 @@ ${entries}
 }
 
 
-const STATUS_LABEL: Record<Status, string> = { queued: "Queued", processing: "Reading aloud", done: "Ready", failed: "Failed" };
+const STATUS_LABEL: Record<Status, string> = { queued: "😋 In my mouth", processing: "🦷 CHEWING", done: "🔊 Burped out", failed: "🤮 Spat out" };
 
 function statusPage(env: Env, origin: string, items: Item[], note = ""): string {
 	const base = `${origin}/${env.TOKEN}`;
@@ -249,18 +249,20 @@ function statusPage(env: Env, origin: string, items: Item[], note = ""): string 
 <div class="row"><span class="pill ${i.status}">${STATUS_LABEL[i.status]}</span><span class="meta">${esc(meta.join(" · "))}</span></div>
 <h3>${esc(i.title ?? i.url)}</h3>
 ${i.error ? `<p class="err">${esc(i.error)}</p>` : ""}
-<div class="row actions"><a href="${esc(i.url)}">Article</a>${i.status === "done" ? `<a href="${esc(`${base}/audio/${i.id}.mp3`)}">Listen</a>` : ""}${i.status === "failed" ? `<form method="post" action="${esc(`${base}/retry/${i.id}`)}"><button class="link">Retry</button></form>` : ""}
-<form method="post" action="${esc(`${base}/delete/${i.id}`)}" onsubmit="return confirm('Delete this episode?')"><button class="link danger">Delete</button></form></div>
+<div class="row actions"><a href="${esc(i.url)}">Raw meat</a>${i.status === "done" ? `<a href="${esc(`${base}/audio/${i.id}.mp3`)}">Listen to the burp</a>` : ""}${i.status === "failed" ? `<form method="post" action="${esc(`${base}/retry/${i.id}`)}"><button class="link">Re-chomp</button></form>` : ""}
+<form method="post" action="${esc(`${base}/delete/${i.id}`)}" onsubmit="return confirm('EAT THIS ONE AGAIN? Forever? No take-backs?? OM NOM?')"><button class="link danger">Eat it again</button></form></div>
 </li>`;
 		})
 		.join("");
+	const copy = (label: string, value: string, cls = "btn") =>
+		`<button type="button" class="${cls}" onclick="navigator.clipboard.writeText('${esc(value)}').then(()=>this.textContent=NOMS[Math.floor(Math.random()*NOMS.length)])">${label}</button>`;
 	const shortcut = env.SHORTCUT_URL
-		? `<section class="panel"><h2>Share from iPhone</h2><p>Tap <b>Copy my add URL</b>, then <b>Add to share sheet</b>. Paste the URL when Shortcuts asks.</p>
-<div class="row"><button type="button" class="btn" onclick="navigator.clipboard.writeText('${esc(base)}/add').then(()=>this.textContent='Copied!')">Copy my add URL</button><a class="btn gold" href="${esc(env.SHORTCUT_URL)}">Add to share sheet</a></div></section>`
-		: "";
+		? `<p>HELLO TINY GLASS RECTANGLE. Tap <b>Copy my mouth URL</b>. Then tap <b>Put me in your share sheet</b>. When Shortcuts asks, PASTE MY MOUTH. Then from Safari or ANY app: <b>Share → Podchast</b> → I EAT IT. OM.</p>
+<div class="row">${copy("Copy my mouth URL 👄", `${base}/add`)}<a class="btn gold" href="${esc(env.SHORTCUT_URL)}">Put me in your share sheet 🦷</a></div>`
+		: `<p>NO SHORTCUT LINK?! RUDE. Fine. Build a Shortcut that sends a POST with JSON <code class="inline">{"url": "…"}</code> to my MOUTH. The README knows how. I do not read READMEs. I EAT them.</p><div class="row">${copy("Copy my mouth URL 👄", `${base}/add`)}</div>`;
 	return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>${esc(title)}</title>
 <link rel="manifest" href="${esc(base)}/manifest.webmanifest"><link rel="apple-touch-icon" href="${esc(base)}/icon-180.png"><link rel="icon" href="${esc(base)}/icon-192.png">
-<meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="${esc(title)}"><meta name="theme-color" content="#0392b4">
+<meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="${esc(title)}"><meta name="theme-color" content="#0392b4"><script>document.documentElement.classList.add("js")</script>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;700&display=swap" rel="stylesheet">
 <style>
 :root{--teal:#05aabe;--teal-d:#0392b4;--teal-dd:#0b5f78;--ink:#20293c;--parch:#f7e6c4;--parch-d:#e8cf9f;--wood:#6b4226;--iron:#3d4450;--gold:#f2b632;--ember:#ff7a1a;--red:#c8323c;--green:#2f9e5b}
@@ -296,16 +298,40 @@ ul{list-style:none;padding:0;margin:0;display:grid;gap:12px}
 .actions{gap:14px;margin-top:4px}.actions form{display:inline}
 button.danger{color:var(--red)}
 .empty{text-align:center;color:var(--wood)}
+.tabs{display:flex;gap:6px;margin:4px 0 12px;background:rgba(0,0,0,.18);padding:5px;border-radius:14px}
+.tabs a{flex:1;text-align:center;padding:8px 6px;border-radius:10px;font:700 16px Fredoka,system-ui,sans-serif;color:#fff;text-decoration:none}
+.tabs a[aria-selected=true]{background:var(--parch);color:var(--ink);box-shadow:0 3px 0 rgba(0,0,0,.25)}
+.js .tab{display:none}.js .tab.on{display:block}
+.tab .panel:first-child{margin-top:0}
+.steps{display:block;padding-left:18px;list-style:disc}.steps li{margin:4px 0}
+code.inline{display:inline;padding:1px 4px;border-style:solid}
 @media (prefers-color-scheme:dark){html{background:#04222c}:root{--parch:#2a2f3a;--parch-d:#444b59;--ink:#f3ead6;--wood:#e8cf9f;--teal-dd:#5fd8e6}body{background:radial-gradient(circle at 50% 0,#0b6f86 0,#06485a 45%,#04222c 100%) fixed}input[type=url],code{background:#1d222b;color:var(--ink)}.pill{color:#20293c}.pill.done,.pill.processing,.pill.failed{color:#fff}.btn,button.btn{border-color:#20293c;box-shadow:0 4px 0 #000}.btn.gold{color:#20293c}h1{-webkit-text-stroke-color:#20293c;text-shadow:0 4px 0 #000}.note{color:#20293c}}
 </style></head><body><main>
-<header><img src="${esc(base)}/icon-192.png" alt=""><div><h1>${esc(title)}</h1><p>Articles in. Audio out. Gone in ${Number(env.RETENTION_DAYS) || 30} days.</p></div></header>
-${note ? `<section class="panel note">${esc(note)}</section>` : ""}
-<section class="panel"><h2>Add an article</h2><form class="add" method="post" action="${esc(base)}/add"><input type="url" name="url" placeholder="https://example.com/article" required><button class="btn gold">Add</button></form></section>
-${shortcut}
-<section class="panel"><h2>Podcast feed</h2><p>Add this to your podcast app with "Follow by URL".</p><code>${esc(base)}/feed.xml</code><div class="row" style="margin-top:10px"><button type="button" class="btn" onclick="navigator.clipboard.writeText('${esc(base)}/feed.xml').then(()=>this.textContent='Copied!')">Copy feed URL</button></div></section>
-<ul>${rows || `<li class="card empty">Nothing yet. Share an article to start.</li>`}</ul>
+<header><img src="${esc(base)}/icon-192.png" alt=""><div><h1>${esc(title)}</h1><p id="growl">ARTICLES IN. NOISES OUT. EVERYTHING EATEN AGAIN IN ${Number(env.RETENTION_DAYS) || 30} DAYS. OM NOM.</p></div></header>
+<nav class="tabs" role="tablist"><a href="#articles" role="tab">Articles</a><a href="#feed" role="tab">XML feed</a><a href="#share" role="tab">Share sheet</a></nav>
+<section id="articles" class="tab">
+${note ? `<div class="panel note">${esc(note)}</div>` : ""}
+<div class="panel"><h2>FEED ME. FEED ME NOW. 🍖</h2><form class="add" method="post" action="${esc(base)}/add"><input type="url" name="url" placeholder="PUT A LINK IN MY MOUTH" required><button class="btn gold">NOM IT</button></form></div>
+<ul>${rows || `<li class="card empty">MY BELLY IS EMPTY. I AM SO HUNGRY. I could eat a WHOLE NEWSLETTER. I could eat a TERMS OF SERVICE. Share me an article before I eat the CSS. 🫥</li>`}</ul>
+</section>
+<section id="feed" class="tab">
+<div class="panel"><h2>MY GUTS (in XML) 🫀</h2><p>Give this URL to your podcast app so it can listen to my TUMMY. Do NOT show it to strangers. The token in it is my SECRET BELLY BUTTON. Anyone with it can feed me. Anyone.</p><code>${esc(base)}/feed.xml</code><div class="row" style="margin-top:10px">${copy("Copy my guts", `${base}/feed.xml`)}<a class="btn gold" href="${esc(base)}/feed.xml">Look inside me 👀</a></div></div>
+<div class="panel"><h2>Shove my guts into your app</h2><ul class="steps"><li><b>Pocket Casts:</b> Search, then paste my guts. SQUELCH.</li><li><b>Apple Podcasts:</b> Library, then <b>…</b>, then <b>Follow a Show by URL</b>. Yes it is hidden. Apple fears me.</li><li><b>Overcast:</b> <b>+</b>, then <b>Add URL</b>. Overcast is a nice app. I would eat it.</li></ul></div>
+</section>
+<section id="share" class="tab">
+<div class="panel"><h2>📱 iPhone and iPad (tiny chests)</h2>${shortcut}</div>
+<div class="panel"><h2>💻 Mac (big flat chest)</h2><p>The Shortcut floats over through the iCLOUD (a cloud I have tried to eat). It shows in Safari's <b>Share</b> menu on your Mac too. Want me in your Dock? Safari: <b>File → Add to Dock</b>. I will sit there. Watching. Hungry.</p></div>
+<div class="panel"><h2>🤖 Android (green robot snack)</h2><p>Open this page in Chrome. Tap <b>Add to Home screen</b>. Now I live in your share menu. I pay no rent. I eat links. OM.</p></div>
+</section>
 </main>
-<script>if("serviceWorker" in navigator)navigator.serviceWorker.register("${esc(base)}/sw.js").catch(()=>{})</script></body></html>`;
+<script>
+function show(){var id=(location.hash||"#articles").slice(1);if(!document.getElementById(id))id="articles";document.querySelectorAll(".tab").forEach(function(t){t.classList.toggle("on",t.id===id)});document.querySelectorAll(".tabs a").forEach(function(a){a.setAttribute("aria-selected",a.getAttribute("href")==="#"+id)})}
+addEventListener("hashchange",show);show();
+document.querySelectorAll(".tabs a").forEach(function(a){a.addEventListener("click",function(e){e.preventDefault();history.replaceState(null,"",a.getAttribute("href"));show()})});
+var NOMS=["OM NOM! COPIED!","GULP! IN YOUR CLIPBOARD!","CHOMP. DONE. 🦷","*BURP* COPIED","YUM. CLIPBOARD FED."];
+var GROWLS=["ARTICLES IN. NOISES OUT. OM NOM.","I AM A CHEST. I AM HUNGRY. THESE FACTS ARE RELATED.","FEED ME WORDS. I SPIT OUT PODCASTS. THIS IS SCIENCE.","I ATE A PAYWALL ONCE. IT WAS CRUNCHY.","NOM NOM NOM NOM NOM NOM NOM NOM.","DO NOT PUT YOUR HAND IN ME. PUT A LINK IN ME.","I HAVE TEETH WHERE MY LID SHOULD BE. WHAT OF IT.","YOU LOOK CRUNCHY. JUST AN OBSERVATION.","I DREAM OF LONGREADS. 10,000 WORDS. MMMMM."];
+var g=document.getElementById("growl");if(g&&Math.random()<0.75)g.textContent=GROWLS[Math.floor(Math.random()*GROWLS.length)];
+if("serviceWorker" in navigator)navigator.serviceWorker.register("${esc(base)}/sw.js").catch(()=>{})</script></body></html>`;
 }
 
 /** Web app manifest. On Android, installing the status page adds Podchast to the share menu. */
@@ -337,7 +363,7 @@ async function handleFetch(req: Request, env: Env): Promise<Response> {
 	// POST /add (token in header, query or body) — used by the iOS Shortcut.
 	if (parts[0] === "add" && parts.length === 1) {
 		const { token, target } = await readAddRequest(req, url);
-		if (!safeEqual(token, env.TOKEN)) return reply(req, 401, "Podchast: wrong or missing token.");
+		if (!safeEqual(token, env.TOKEN)) return reply(req, 401, "GRRRR. WRONG TOKEN. You are NOT my keeper. I bite strangers. 🦷");
 		return queueReply(req, env, target);
 	}
 
@@ -365,9 +391,9 @@ async function handleFetch(req: Request, env: Env): Promise<Response> {
 		const { target } = await readAddRequest(req, url);
 		// The status page form posts here from a browser. Shortcuts and scripts get a short text reply.
 		if (!wantsHtml(req)) return queueReply(req, env, target);
-		if (!target) return new Response("No URL found", { status: 400 });
+		if (!target) return new Response("NO LINK?! You tried to feed me AIR. I cannot eat AIR. 😤", { status: 400 });
 		await addUrl(env, target);
-		return html(statusPage(env, url.origin, await listItems(env), `Queued: ${target}`));
+		return html(statusPage(env, url.origin, await listItems(env), `OM NOM NOM! In my mouth: ${target} 😋 Chewing soon.`));
 	}
 	if (a === "retry" && b) {
 		const item = await loadItem(env, b);
@@ -391,9 +417,9 @@ function reply(req: Request, status: number, message: string, extra: Record<stri
 }
 
 async function queueReply(req: Request, env: Env, target: string | null): Promise<Response> {
-	if (!target) return reply(req, 400, "Podchast: no link found. Share a web page or copy a link first.");
+	if (!target) return reply(req, 400, "BLEH. NO LINK. You fed me an EMPTY SPOON. Share a web page or copy a link, then try AGAIN. I am STARVING. 😤");
 	const item = await addUrl(env, target);
-	return reply(req, 200, `Added to Podchast: ${target}`, { id: item.id });
+	return reply(req, 200, `OM NOM NOM! SWALLOWED: ${target} 😋🦷 Burping it into your feed soon.`, { id: item.id });
 }
 
 const html = (body: string) => new Response(body, { headers: { "Content-Type": "text/html; charset=utf-8" } });
@@ -532,13 +558,13 @@ async function partText(env: Env, item: Item): Promise<PartText> {
 // A failed item shows in the feed as a short episode. All failed items share one
 // spoken clip; the reason is in the show notes, not in the audio.
 
-const FAILED_ID = "failed";
+const FAILED_ID = "failed-v2";
 
 /** Make the shared "could not read this article" clip if it does not exist yet. */
 async function failureClip(env: Env): Promise<R2Object | null> {
 	const head = await env.AUDIO.head(audioKey(FAILED_ID));
 	if (head) return head;
-	const { mp3 } = await speak(env, "Podchast could not turn this article into audio. The episode notes say why. You can share the link again to try once more.");
+	const { mp3 } = await speak(env, "Bleurgh! Blech! Ptoo! I am the Mimic, and this article tasted like rusty nails and wet socks. I spat it out. I could not chew it into noises. The notes say what got stuck in my teeth. Share the link again and I will try another bite. Om nom. Om nom nom.");
 	return env.AUDIO.put(audioKey(FAILED_ID), mp3, { httpMetadata: { contentType: "audio/mpeg" } });
 }
 

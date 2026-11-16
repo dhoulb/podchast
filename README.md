@@ -96,7 +96,7 @@ Add `https://podchast.<your-subdomain>.workers.dev/<TOKEN>/feed.xml` as a feed b
    Article headings become chapters (ID3 `CHAP` frames in the MP3).
    Articles longer than 40,000 characters (about 40 minutes) become several episodes: "Part 1 of 3", "Part 2 of 3" and so on. Each part is its own queue job.
 6. `GET /<TOKEN>/feed.xml` shows the finished items as a podcast feed.
-7. If an article fails three times, the feed gets a short "Failed: …" episode. Its notes give the reason.
+7. If an article fails three times, the feed gets a short "🤮 SPAT OUT: …" episode. Its notes give the reason.
 8. An R2 lifecycle rule deletes files after 31 days. The feed hides items after 30 days. A daily cron also deletes old files.
 
 ## TTS engine
