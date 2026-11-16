@@ -1,4 +1,4 @@
-import { concat, edgeSynthesise } from "./edge-tts";
+import { type Cue, concat, edgeSynthesise } from "./edge-tts";
 import { chunkText } from "./extract";
 
 const EDGE_PARALLEL = 4;
@@ -19,24 +19,27 @@ async function retry<T>(fn: () => Promise<T>, tries = 3): Promise<T> {
 	throw last;
 }
 
-/** Audio for each text chunk, in order. Chunk timings let the caller place chapter marks. */
-export type Spoken = { chunks: string[]; audio: Uint8Array[] };
+/** Audio for each text chunk, in order. Chunk timings let the caller place chapter marks. cues[i] are the sentence times in chunk i, if the engine gives them. */
+export type Spoken = { chunks: string[]; audio: Uint8Array[]; cues?: Cue[][] };
 
 async function edgeAll(env: TtsEnv, text: string): Promise<Spoken> {
 	// Edge speaks at about 2 to 3 times real time per connection, so run a few parts at once.
 	const chunks = chunkText(text, 3000);
 	const parts: Uint8Array[] = new Array(chunks.length);
+	const cues: Cue[][] = new Array(chunks.length);
 	let next = 0;
 	const worker = async () => {
 		while (next < chunks.length) {
 			const i = next++;
 			const t = Date.now();
-			parts[i] = await retry(() => edgeSynthesise(chunks[i], { voice: env.VOICE, rate: env.RATE, pitch: env.PITCH, format: env.EDGE_FORMAT, pause: Number(env.EDGE_PAUSE_MS) || 0 }, 90_000), 3);
-			console.log(`Edge TTS part ${i + 1}/${chunks.length}: ${parts[i].length} bytes in ${Date.now() - t} ms`);
+			const out = await retry(() => edgeSynthesise(chunks[i], { voice: env.VOICE, rate: env.RATE, pitch: env.PITCH, format: env.EDGE_FORMAT, pause: Number(env.EDGE_PAUSE_MS) || 0 }, 90_000), 3);
+			parts[i] = out.audio;
+			cues[i] = out.cues;
+			console.log(`Edge TTS part ${i + 1}/${chunks.length}: ${parts[i].length} bytes, ${cues[i].length} sentences in ${Date.now() - t} ms`);
 		}
 	};
 	await Promise.all(Array.from({ length: Math.min(EDGE_PARALLEL, chunks.length) }, worker));
-	return { chunks, audio: parts };
+	return { chunks, audio: parts, cues };
 }
 
 async function aiAll(env: TtsEnv, text: string): Promise<Spoken> {
@@ -56,11 +59,12 @@ async function aiAll(env: TtsEnv, text: string): Promise<Spoken> {
 	return { chunks, audio: parts };
 }
 
-export type Speech = { mp3: Uint8Array; engine: Engine; edgeError?: string; marks: (needle: string) => number | undefined };
+/** vtt is a WebVTT transcript with one cue for each sentence. */
+export type Speech = { mp3: Uint8Array; engine: Engine; edgeError?: string; marks: (needle: string) => number | undefined; vtt: string };
 
 /** Speak the text. Uses Edge TTS first, then Workers AI if Edge fails. */
 export async function speak(env: TtsEnv, text: string): Promise<Speech> {
-	const done = (s: Spoken, engine: Engine, edgeError?: string): Speech => ({ mp3: concat(s.audio), engine, edgeError, marks: timeFinder(s) });
+	const done = (s: Spoken, engine: Engine, edgeError?: string): Speech => ({ mp3: concat(s.audio), engine, edgeError, marks: timeFinder(s), vtt: webVtt(s) });
 	if (env.TTS_ENGINE !== "workers-ai") {
 		try {
 			return done(await edgeAll(env, text), "edge");
@@ -98,6 +102,46 @@ function timeFinder({ chunks, audio }: Spoken): (needle: string) => number | und
 		}
 		return undefined;
 	};
+}
+
+/**
+ * A WebVTT transcript for the whole episode. Each chunk is its own MP3, so its
+ * sentence times are moved by the length of the chunks before it. A chunk with
+ * no sentence times (Workers AI, or Edge sent none) gets times estimated from
+ * the length of each sentence.
+ */
+export function webVtt({ chunks, audio, cues }: Spoken): string {
+	const out: Cue[] = [];
+	let t = 0;
+	audio.forEach((a, i) => {
+		const len = mp3Seconds(a);
+		const own = cues?.[i]?.length ? cues[i] : estimateCues(chunks[i], len);
+		for (const c of own) {
+			const start = Math.max(t + Math.min(c.start, len), out.at(-1)?.end ?? 0);
+			const end = Math.max(start + 0.1, t + Math.min(c.end, len));
+			out.push({ start, end, text: c.text });
+		}
+		t += len;
+	});
+	const time = (s: number) => {
+		const ms = Math.round(s * 1000);
+		const p = (n: number, w = 2) => String(n).padStart(w, "0");
+		return `${p(Math.floor(ms / 3_600_000))}:${p(Math.floor(ms / 60_000) % 60)}:${p(Math.floor(ms / 1000) % 60)}.${p(ms % 1000, 3)}`;
+	};
+	const text = (s: string) => s.replace(/\s+/g, " ").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+	return `WEBVTT\n\n${out.map((c) => `${time(c.start)} --> ${time(c.end)}\n${text(c.text)}\n`).join("\n")}`;
+}
+
+/** Split text into sentences, and share the duration between them by length. */
+function estimateCues(text: string, seconds: number): Cue[] {
+	const sentences = (text.match(/[^.!?\n]+[.!?]+["'\u201d\u2019)]*|[^.!?\n]+/g) ?? []).map((s) => s.trim()).filter(Boolean);
+	const total = sentences.reduce((n, s) => n + s.length, 0) || 1;
+	let t = 0;
+	return sentences.map((s) => {
+		const start = t;
+		t += (s.length / total) * seconds;
+		return { start, end: t, text: s };
+	});
 }
 
 /** MP3 duration in whole seconds. */

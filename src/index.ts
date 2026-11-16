@@ -49,6 +49,7 @@ type Item = {
 	pdf?: boolean; // The original PDF is kept forever in read/<id>.pdf.
 	gone?: boolean; // The audio was deleted after RETENTION_DAYS. Only the text is left (🍖 MEAT).
 	aired?: string; // When the audio was last made, if it was made again. The feed uses it for the date.
+	transcript?: boolean; // A timed transcript is in audio/<id>.vtt. It is deleted with the audio.
 };
 
 // Text for one episode, with the headings that become chapters.
@@ -57,6 +58,7 @@ type PartText = { text: string; headings: string[] };
 // ---------- Storage (R2 only) ----------
 // items/<id>  JSON item, also copied into customMetadata so one list() call builds the feed.
 // audio/<id>.mp3  Deleted after RETENTION_DAYS. The item stays.
+// audio/<id>.vtt  Timed transcript (WebVTT). In audio/, so it is deleted with the MP3.
 // parts/<id>.txt  Text for one part of a long article, deleted when that part is done.
 // read/<id>.md    The article text, kept forever. read/<id>.pdf is the original PDF, if there was one.
 
@@ -73,6 +75,7 @@ const PART_CHARS = 40_000;
 // Biggest text /add takes (about 7 hours of audio).
 const MAX_TEXT = 400_000;
 const audioKey = (id: string) => `audio/${id}.mp3`;
+const transcriptKey = (id: string) => `audio/${id}.vtt`;
 
 async function saveItem(env: Env, item: Item): Promise<void> {
 	item.updated = new Date().toISOString();
@@ -257,6 +260,7 @@ function feedXml(env: Env, origin: string, items: Item[], file = FEED): string {
 <content:encoded><![CDATA[${notes.join("\n").replaceAll("]]>", "]]&gt;")}]]></content:encoded>
 <enclosure url="${esc(audio)}" length="${i.bytes ?? 0}" type="audio/mpeg"/>
 <itunes:duration>${hms(i.duration)}</itunes:duration>
+${i.transcript && !failed ? `<podcast:transcript url="${esc(`${base}/audio/${i.id}.vtt`)}" type="text/vtt" language="en" rel="captions"/>` : ""}
 ${i.image && !failed ? `<itunes:image href="${esc(i.image)}"/>` : ""}
 ${i.byline ? `<itunes:author>${esc(i.byline)}</itunes:author>` : ""}
 <itunes:explicit>false</itunes:explicit>
@@ -264,7 +268,7 @@ ${i.byline ? `<itunes:author>${esc(i.byline)}</itunes:author>` : ""}
 		})
 		.join("\n");
 	return `<?xml version="1.0" encoding="UTF-8"?>
-<rss version="2.0" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/">
+<rss version="2.0" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:podcast="https://podcastindex.org/namespace/1.0">
 <channel>
 <title>${esc(title)}</title>
 <link>${esc(base)}</link>
@@ -567,13 +571,18 @@ async function handleFetch(req: Request, env: Env): Promise<Response> {
 	if (a === "cover.jpg" || a === "cover.png") return coverResponse();
 	if (a === "audio" && b === `${FAILED_ID}.mp3`) await failureClip(env).catch(() => null);
 	if (a === "audio" && b?.endsWith(".mp3")) return serveAudio(env, req, b.slice(0, -4));
+	if (a === "audio" && b?.endsWith(".vtt")) {
+		const obj = await env.AUDIO.get(transcriptKey(b.slice(0, -4)));
+		if (!obj) return new Response("Not found", { status: 404 });
+		return new Response(obj.body, { headers: { "Content-Type": "text/vtt; charset=utf-8", "Access-Control-Allow-Origin": "*", "Cache-Control": "private, max-age=86400" } });
+	}
 	if (a === "manifest.webmanifest") return new Response(manifest(env), { headers: { "Content-Type": "application/manifest+json" } });
 	if (a === "sw.js") return new Response('self.addEventListener("fetch", () => {});', { headers: { "Content-Type": "text/javascript" } });
 	if (a === "icon-180.png") return png(icon180);
 	if (a === "icon-192.png") return png(icon192);
 	if (a === "icon-512.png") return png(icon512);
 	if (a === "delete" && b && b !== FAILED_ID && req.method === "POST") {
-		await env.AUDIO.delete([itemKey(b), audioKey(b), partKey(b), readKey(b), pdfKey(b)]);
+		await env.AUDIO.delete([itemKey(b), audioKey(b), transcriptKey(b), partKey(b), readKey(b), pdfKey(b)]);
 		return Response.redirect(`${url.origin}/${env.TOKEN}`, 303);
 	}
 	if (a === "read" && b) return serveRead(env, url.origin, b);
@@ -703,7 +712,7 @@ async function processJob(env: Env, job: Job, attempt: number): Promise<void> {
 		const script = `${intro}\n\n${text}\n\n${outro}`;
 		item.chars = script.length;
 		item.words = text.split(/\s+/).filter(Boolean).length;
-		const { mp3, engine, edgeError, marks } = await speak(env, script);
+		const { mp3, engine, edgeError, marks, vtt } = await speak(env, script);
 		const seconds = mp3Duration(mp3);
 		// Chapters: the article start, then one for each heading.
 		const chapters: Chapter[] = [{ title: item.title ?? "Start", start: 0 }];
@@ -713,6 +722,8 @@ async function processJob(env: Env, job: Job, attempt: number): Promise<void> {
 		}
 		const audio = concat([id3Tag(item.title ?? "Podchast", chapters, seconds), mp3]);
 		await env.AUDIO.put(audioKey(item.id), audio, { httpMetadata: { contentType: "audio/mpeg" } });
+		await env.AUDIO.put(transcriptKey(item.id), vtt, { httpMetadata: { contentType: "text/vtt; charset=utf-8" } });
+		item.transcript = true;
 		item.bytes = audio.length;
 		item.duration = seconds;
 		item.chapters = chapters.length >= 2 ? chapters.length : undefined;
@@ -969,6 +980,7 @@ export default {
 			const full = await loadItem(env, item.id);
 			if (!full) continue;
 			full.gone = true;
+			full.transcript = undefined;
 			await saveItem(env, full);
 		}
 	},
