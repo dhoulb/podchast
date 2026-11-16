@@ -327,7 +327,7 @@ function statusPage(env: Env, origin: string, items: Item[], note = ""): string 
 			const meta = [i.duration && hms(i.duration), i.words && `${i.words.toLocaleString("en-GB")} words`, i.chapters && `${i.chapters} chapters`, i.site, new Date(i.created).toLocaleDateString("en-GB", { day: "numeric", month: "short" })].filter(Boolean);
 			return `<li class="card">
 <div class="row">${i.gone && i.status === "done" ? `<span class="pill meat">${MEAT}</span>` : `<span class="pill ${i.status}">${STATUS_LABEL[i.status]}</span>`}<span class="meta">${esc(meta.join(" · "))}</span></div>
-<h3>${esc(i.title ?? (i.url || "Some text"))}</h3>
+${i.title ? `<h3>${esc(i.title)}</h3>` : `<h3 class="url">${esc(i.url || "Some text")}</h3>`}
 ${i.error ? `<p class="err">${esc(i.error)}</p>` : ""}
 <div class="row actions">${i.saved ? `<a href="${esc(`${base}/read/${rootId(i.id)}`)}">Read</a>` : ""}${i.status === "done" && !i.gone ? `<a href="${esc(`${base}/audio/${i.id}.mp3`)}">Play</a>` : ""}${i.url ? `<a href="${esc(i.url)}">Source</a>` : ""}${i.pdf ? `<a href="${esc(`${base}/read/${rootId(i.id)}.pdf`)}">PDF</a>` : ""}${i.status === "failed" || (i.gone && i.status === "done" && (i.part ?? 1) === 1) ? `<form method="post" action="${esc(`${base}/retry/${i.id}`)}"><button class="link">Re-chomp</button></form>` : ""}
 <form method="post" action="${esc(`${base}/delete/${i.id}`)}" onsubmit="return confirm('DELETE this one? Forever? No take-backs??')"><button class="link danger">Delete</button></form></div>
@@ -340,15 +340,16 @@ ${i.error ? `<p class="err">${esc(i.error)}</p>` : ""}
 		? `<p>HELLO TINY GLASS RECTANGLE. Put me in your share sheet:</p><ol class="steps"><li>Tap <b>Copy MOUTH URL</b>.</li><li>Tap <b>Add 🍖 DEVOUR shortcut</b>. When Shortcuts asks, paste the URL.</li><li>In Safari or any app, tap <b>Share → 🍖 DEVOUR</b>. I EAT IT. OM.</li></ol>
 <div class="row">${copy("Copy MOUTH URL 🫦", `${base}/add`)}<a class="btn gold" href="${esc(env.SHORTCUT_URL)}">Add 🍖 DEVOUR shortcut</a></div>`
 		: `<p>NO SHORTCUT LINK?! RUDE. Fine. Build a Shortcut that sends a POST with JSON <code class="inline">{"url": "…"}</code> to my 🫦 MOUTH URL. The README has the steps. (I do not read READMEs. I EAT them.)</p><div class="row">${copy("Copy MOUTH URL 🫦", `${base}/add`)}</div>`;
-	return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>${esc(title)}</title>
+	return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover"><title>${esc(title)}</title>
 <link rel="manifest" href="${esc(base)}/manifest.webmanifest"><link rel="apple-touch-icon" href="${esc(base)}/icon-180.png"><link rel="icon" href="${esc(base)}/icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="${esc(title)}"><meta name="theme-color" content="#0392b4"><script>document.documentElement.classList.add("js")</script>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;700&display=swap" rel="stylesheet">
 <style>
 :root{--teal:#05aabe;--teal-d:#0392b4;--teal-dd:#0b5f78;--ink:#20293c;--parch:#f7e6c4;--parch-d:#e8cf9f;--wood:#6b4226;--iron:#3d4450;--gold:#f2b632;--ember:#ff7a1a;--red:#c8323c;--green:#2f9e5b}
 *{box-sizing:border-box}
-html{background:var(--teal-d)}
-body{margin:0;min-height:100vh;font:16px/1.5 system-ui,-apple-system,sans-serif;color:var(--ink);background:radial-gradient(circle at 50% 0,#22c3d4 0,var(--teal) 35%,var(--teal-d) 100%) fixed;padding:env(safe-area-inset-top) 16px 48px}
+html{background:var(--teal-d);overflow-x:hidden;touch-action:pan-y;-webkit-text-size-adjust:100%;text-size-adjust:100%}
+body{margin:0;min-height:100vh;font:16px/1.5 system-ui,-apple-system,sans-serif;color:var(--ink);background:radial-gradient(circle at 50% 0,#22c3d4 0,var(--teal) 35%,var(--teal-d) 100%) fixed;padding:env(safe-area-inset-top) 16px 48px;overflow-x:hidden;max-width:100vw}
+main>*,section{min-width:0;max-width:100%}
 main{max-width:720px;margin:0 auto}
 header.hero{position:relative;margin:16px 0;border:4px solid var(--iron);border-radius:22px;overflow:hidden;box-shadow:0 6px 0 rgba(0,0,0,.25);background:#2a1a10}
 header.hero img{display:block;width:100%;aspect-ratio:1400/764;object-fit:cover}
@@ -366,21 +367,24 @@ input[type=url]{width:100%;padding:12px;font:inherit;border:3px solid var(--iron
 .btn,button.btn{display:inline-block;padding:10px 18px;font-size:17px;font-weight:700;color:#fff;background:var(--teal-d);border:3px solid var(--ink);border-radius:12px;box-shadow:0 4px 0 var(--ink);text-decoration:none;cursor:pointer}
 .btn:active{transform:translateY(3px);box-shadow:0 1px 0 var(--ink)}
 .btn.gold{background:var(--gold);color:var(--ink)}
-form.add{display:flex;gap:8px;flex-wrap:wrap}form.add input{flex:1 1 260px}form.add details{flex:1 1 100%}form.add summary{cursor:pointer;font-weight:700;padding:4px 0}form.add details input,form.add textarea{display:block;width:100%;margin:8px 0;padding:12px;font:inherit;border:3px solid var(--iron);border-radius:12px;background:#fffaf0;color:inherit}
+form.add{display:flex;gap:8px;flex-wrap:wrap}form.add input{flex:1 1 200px;min-width:0}form.add details{flex:1 1 100%}form.add summary{cursor:pointer;font-weight:700;padding:4px 0}form.add details input,form.add textarea{display:block;width:100%;margin:8px 0;padding:12px;font:inherit;border:3px solid var(--iron);border-radius:12px;background:#fffaf0;color:inherit}
 code{display:block;word-break:break-all;background:#fffaf0;border:2px dashed var(--parch-d);border-radius:8px;padding:8px;font-size:13px}
-ul{list-style:none;padding:0;margin:0;display:grid;gap:12px}
-.card{padding:12px 14px}
-.card h3{margin:6px 0;font-size:19px;line-height:1.25;color:var(--ink)}
+ul{list-style:none;padding:0;margin:0;display:grid;grid-template-columns:minmax(0,1fr);gap:12px}
+.card{padding:12px 14px;min-width:0;overflow:hidden}
+.card .row{flex-wrap:nowrap;min-width:0}.card .row.actions{flex-wrap:wrap}.pill{flex:none}
+.card .meta{flex:1 1 auto;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.card h3{margin:6px 0;font-size:19px;line-height:1.25;color:var(--ink);overflow-wrap:anywhere;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;line-clamp:3;overflow:hidden}
+.card h3.url{display:block;white-space:nowrap;text-overflow:ellipsis;font-size:16px}
 .meta{color:var(--wood);font-size:14px}
 .pill{font-size:13px;font-weight:700;padding:2px 10px;border-radius:999px;border:2px solid var(--ink);background:#fff}
 .pill.done{background:var(--green);color:#fff}.pill.processing{background:var(--ember);color:#fff}.pill.queued{background:var(--gold)}.pill.failed{background:var(--red);color:#fff}.pill.meat{background:#e07a5f;color:#fff}
-.err{margin:4px 0;color:var(--red);font-size:14px}
+.err{margin:4px 0;color:var(--red);font-size:14px;overflow-wrap:anywhere;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:4;overflow:hidden}
 .actions a,button.link{font:inherit;font-size:15px;font-weight:600;color:var(--teal-dd);background:none;border:0;padding:0;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
 .actions{gap:14px;margin-top:4px}.actions form{display:inline}
 button.danger{color:var(--red)}
 .empty{text-align:center;color:var(--wood)}
 .tabs{display:flex;gap:6px;margin:4px 0 12px;background:rgba(0,0,0,.18);padding:5px;border-radius:14px}
-.tabs a{flex:1;text-align:center;padding:8px 6px;border-radius:10px;font:700 16px Fredoka,system-ui,sans-serif;color:#fff;text-decoration:none}
+.tabs a{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:center;padding:8px 6px;border-radius:10px;font:700 16px Fredoka,system-ui,sans-serif;color:#fff;text-decoration:none}
 .tabs a[aria-selected=true]{background:var(--parch);color:var(--ink);box-shadow:0 3px 0 rgba(0,0,0,.25)}
 .js .tab{display:none}.js .tab.on{display:block}
 .tab .panel:first-child{margin-top:0}
@@ -453,10 +457,10 @@ function readPage(env: Env, origin: string, id: string, item: Item | null, md: s
 <style>
 :root{--bg:#fbf6ec;--ink:#20293c;--muted:#6b4226;--link:#0b5f78;--rule:#e8cf9f}
 @media (prefers-color-scheme:dark){:root{--bg:#161a21;--ink:#ece6d8;--muted:#e8cf9f;--link:#5fd8e6;--rule:#3a404c}}
-html{background:var(--bg)}body{margin:0;padding:24px 16px 64px;color:var(--ink);background:var(--bg);font:19px/1.6 Georgia,"Iowan Old Style",serif}
+html{background:var(--bg);overflow-x:hidden}body{margin:0;overflow-x:hidden;overflow-wrap:anywhere;padding:24px 16px 64px;color:var(--ink);background:var(--bg);font:19px/1.6 Georgia,"Iowan Old Style",serif}
 main{max-width:680px;margin:0 auto}nav{display:flex;flex-wrap:wrap;gap:16px;font:600 15px system-ui,sans-serif;margin-bottom:24px}a{color:var(--link)}
 h1{font-size:34px;line-height:1.15;margin:0 0 8px}h2,h3,h4{line-height:1.25;margin:1.6em 0 .4em}.meta{color:var(--muted);font:14px system-ui,sans-serif;margin:0 0 28px;padding-bottom:16px;border-bottom:2px solid var(--rule)}
-blockquote{margin:1em 0;padding-left:16px;border-left:3px solid var(--rule)}pre{white-space:pre-wrap;font-size:14px;background:rgba(0,0,0,.05);padding:12px;border-radius:8px}li{margin:.3em 0}img{max-width:100%}
+blockquote{margin:1em 0;padding-left:16px;border-left:3px solid var(--rule)}pre{white-space:pre-wrap;font-size:14px;background:rgba(0,0,0,.05);padding:12px;border-radius:8px}li{margin:.3em 0}img,video,iframe,table{max-width:100%}table{display:block;overflow-x:auto}
 </style></head><body><main><nav>${links.join("")}</nav><h1>${esc(title)}</h1>${meta ? `<p class="meta">${esc(meta)}</p>` : ""}
 ${markdownToHtml(md.replace(/^#\s+.+\n+/, ""))}
 </main></body></html>`;
