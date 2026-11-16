@@ -23,6 +23,7 @@ Still ask Dave before you:
 - R2 bucket `podchast`:
   - `items/<id>`: item JSON, also in `customMetadata.item`. Kept forever.
   - `read/<id>.md` (article text) and `read/<id>.pdf` (original PDF). Kept forever. Shown at `/<TOKEN>/read/<id>`.
+  - `audio/<id>.vtt`: timed transcript (one cue for each sentence, from Edge TTS sentence boundaries). The feed links it with `<podcast:transcript>`, so Pocket Casts shows it live. It is deleted with the MP3.
   - `audio/<id>.mp3`: deleted after `RETENTION_DAYS` (90) by the cron. Lifecycle rule: 91 days. The item then gets `gone: true` and shows as "🍖 MEAT". Re-chomp reads `read/<id>.md` and makes the audio again.
   - `parts/<id>.txt`: text of one part of a long article. Lifecycle rule: 31 days.
 - Email in: the Worker `email()` handler (`src/mail.ts` reads the MIME). Email Routing on the subdomain `podchast.dhoulb.com` sends `devour@` to the Worker. Only senders in the `EMAIL_FROM` secret are accepted. PDFs (attachments and links) become text with Workers AI `toMarkdown`.
