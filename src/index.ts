@@ -227,9 +227,8 @@ ${i.byline ? `<itunes:author>${esc(i.byline)}</itunes:author>` : ""}
 <description>Articles read aloud. Episodes disappear after ${Number(env.RETENTION_DAYS) || 30} days.</description>
 <language>en</language>
 <itunes:author>${esc(title)}</itunes:author>
-<itunes:image href="${esc(`${base}/cover.jpg?v=2`)}"/>
-<image><url>${esc(`${base}/cover.jpg?v=2`)}</url><title>${esc(title)}</title><link>${esc(base)}</link></image>
-<itunes:block>Yes</itunes:block>
+<itunes:image href="${esc(`${base}/cover.jpg?v=3`)}"/>
+<image><url>${esc(`${base}/cover.jpg?v=3`)}</url><title>${esc(title)}</title><link>${esc(base)}</link></image>
 <itunes:explicit>false</itunes:explicit>
 <itunes:category text="News"/>
 ${entries}
@@ -238,28 +237,74 @@ ${entries}
 }
 
 
+const STATUS_LABEL: Record<Status, string> = { queued: "Queued", processing: "Reading aloud", done: "Ready", failed: "Failed" };
+
 function statusPage(env: Env, origin: string, items: Item[], note = ""): string {
 	const base = `${origin}/${env.TOKEN}`;
 	const title = env.FEED_TITLE || "Podchast";
 	const rows = items
-		.map(
-			(i) => `<li><b>${esc(i.title ?? i.url)}</b><br><small>${esc(i.status)}${i.duration ? ` · ${hms(i.duration)}` : ""}${i.engine ? ` · ${esc(i.engine)}` : ""} · ${esc(new Date(i.created).toUTCString())} · <a href="${esc(i.url)}">source</a>${i.status === "done" ? ` · <a href="${esc(`${base}/audio/${i.id}.mp3`)}">mp3</a>` : ""}${i.error ? `<br>Error: ${esc(i.error)}` : ""}</small>
-<form class="del" method="post" action="${esc(`${base}/delete/${i.id}`)}" onsubmit="return confirm('Delete this episode?')"><button>Delete</button></form></li>`,
-		)
+		.map((i) => {
+			const meta = [i.duration && hms(i.duration), i.words && `${i.words.toLocaleString("en-GB")} words`, i.chapters && `${i.chapters} chapters`, i.site, new Date(i.created).toLocaleDateString("en-GB", { day: "numeric", month: "short" })].filter(Boolean);
+			return `<li class="card">
+<div class="row"><span class="pill ${i.status}">${STATUS_LABEL[i.status]}</span><span class="meta">${esc(meta.join(" · "))}</span></div>
+<h3>${esc(i.title ?? i.url)}</h3>
+${i.error ? `<p class="err">${esc(i.error)}</p>` : ""}
+<div class="row actions"><a href="${esc(i.url)}">Article</a>${i.status === "done" ? `<a href="${esc(`${base}/audio/${i.id}.mp3`)}">Listen</a>` : ""}${i.status === "failed" ? `<form method="post" action="${esc(`${base}/retry/${i.id}`)}"><button class="link">Retry</button></form>` : ""}
+<form method="post" action="${esc(`${base}/delete/${i.id}`)}" onsubmit="return confirm('Delete this episode?')"><button class="link danger">Delete</button></form></div>
+</li>`;
+		})
 		.join("");
 	const shortcut = env.SHORTCUT_URL
-		? `<p><a class="btn" href="${esc(env.SHORTCUT_URL)}">Add to share sheet</a> <button type="button" onclick="navigator.clipboard.writeText('${esc(base)}/add').then(()=>this.textContent='Copied')">Copy my add URL</button><br><small>iPhone: tap Copy, then Add. Paste the URL when Shortcuts asks for it.</small></p>`
+		? `<section class="panel"><h2>Share from iPhone</h2><p>Tap <b>Copy my add URL</b>, then <b>Add to share sheet</b>. Paste the URL when Shortcuts asks.</p>
+<div class="row"><button type="button" class="btn" onclick="navigator.clipboard.writeText('${esc(base)}/add').then(()=>this.textContent='Copied!')">Copy my add URL</button><a class="btn gold" href="${esc(env.SHORTCUT_URL)}">Add to share sheet</a></div></section>`
 		: "";
-	return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title>
+	return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>${esc(title)}</title>
 <link rel="manifest" href="${esc(base)}/manifest.webmanifest"><link rel="apple-touch-icon" href="${esc(base)}/icon-180.png"><link rel="icon" href="${esc(base)}/icon-192.png">
-<meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="${esc(title)}"><meta name="theme-color" content="#1b9fb0">
-<style>body{font:16px/1.5 system-ui,sans-serif;max-width:720px;margin:0 auto;padding:16px}input[type=url]{width:100%;padding:8px;font:inherit;box-sizing:border-box}button,.btn{margin-top:8px;padding:8px 16px;font:inherit;display:inline-block;border:1px solid #888;border-radius:6px;background:#f4f4f4;color:inherit;text-decoration:none}li{margin:12px 0}small{color:#666}code{word-break:break-all}form.del{display:inline}form.del button{margin:4px 0 0;padding:2px 10px;font-size:13px}</style></head><body>
-<h1>${esc(title)}</h1>
-${note ? `<p><b>${esc(note)}</b></p>` : ""}
-<form method="post" action="${esc(base)}/add"><input type="url" name="url" placeholder="https://example.com/article" required><button>Add article</button></form>
+<meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="${esc(title)}"><meta name="theme-color" content="#0392b4">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;700&display=swap" rel="stylesheet">
+<style>
+:root{--teal:#05aabe;--teal-d:#0392b4;--teal-dd:#0b5f78;--ink:#20293c;--parch:#f7e6c4;--parch-d:#e8cf9f;--wood:#6b4226;--iron:#3d4450;--gold:#f2b632;--ember:#ff7a1a;--red:#c8323c;--green:#2f9e5b}
+*{box-sizing:border-box}
+html{background:var(--teal-d)}
+body{margin:0;min-height:100vh;font:16px/1.5 system-ui,-apple-system,sans-serif;color:var(--ink);background:radial-gradient(circle at 50% 0,#22c3d4 0,var(--teal) 35%,var(--teal-d) 100%) fixed;padding:env(safe-area-inset-top) 16px 48px}
+main{max-width:720px;margin:0 auto}
+header{display:flex;align-items:center;gap:16px;padding:24px 0 16px}
+header img{width:84px;height:84px;border-radius:20px;border:4px solid var(--iron);box-shadow:0 6px 0 rgba(0,0,0,.25)}
+h1,h2,h3,.btn,.pill{font-family:Fredoka,system-ui,sans-serif}
+h1{margin:0;font-size:44px;line-height:1;color:#fff;letter-spacing:1px;-webkit-text-stroke:2px var(--ink);paint-order:stroke fill;text-shadow:0 4px 0 var(--ink)}
+header p{margin:6px 0 0;color:#e9fbff;font-weight:600}
+.panel,.card{background:var(--parch);border:3px solid var(--iron);border-radius:16px;box-shadow:0 5px 0 rgba(0,0,0,.25)}
+.panel{padding:16px;margin:16px 0}
+.panel h2{margin:0 0 8px;font-size:20px;color:var(--wood)}
+.panel p{margin:0 0 12px}
+.note{background:var(--gold);border-color:var(--ink);font-weight:600}
+input[type=url]{width:100%;padding:12px;font:inherit;border:3px solid var(--iron);border-radius:12px;background:#fffaf0}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.btn,button.btn{display:inline-block;padding:10px 18px;font-size:17px;font-weight:700;color:#fff;background:var(--teal-d);border:3px solid var(--ink);border-radius:12px;box-shadow:0 4px 0 var(--ink);text-decoration:none;cursor:pointer}
+.btn:active{transform:translateY(3px);box-shadow:0 1px 0 var(--ink)}
+.btn.gold{background:var(--gold);color:var(--ink)}
+form.add{display:flex;gap:8px;flex-wrap:wrap}form.add input{flex:1 1 260px}
+code{display:block;word-break:break-all;background:#fffaf0;border:2px dashed var(--parch-d);border-radius:8px;padding:8px;font-size:13px}
+ul{list-style:none;padding:0;margin:0;display:grid;gap:12px}
+.card{padding:12px 14px}
+.card h3{margin:6px 0;font-size:19px;line-height:1.25;color:var(--ink)}
+.meta{color:var(--wood);font-size:14px}
+.pill{font-size:13px;font-weight:700;padding:2px 10px;border-radius:999px;border:2px solid var(--ink);background:#fff}
+.pill.done{background:var(--green);color:#fff}.pill.processing{background:var(--ember);color:#fff}.pill.queued{background:var(--gold)}.pill.failed{background:var(--red);color:#fff}
+.err{margin:4px 0;color:var(--red);font-size:14px}
+.actions a,button.link{font:inherit;font-size:15px;font-weight:600;color:var(--teal-dd);background:none;border:0;padding:0;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+.actions{gap:14px;margin-top:4px}.actions form{display:inline}
+button.danger{color:var(--red)}
+.empty{text-align:center;color:var(--wood)}
+@media (prefers-color-scheme:dark){html{background:#04222c}:root{--parch:#2a2f3a;--parch-d:#444b59;--ink:#f3ead6;--wood:#e8cf9f;--teal-dd:#5fd8e6}body{background:radial-gradient(circle at 50% 0,#0b6f86 0,#06485a 45%,#04222c 100%) fixed}input[type=url],code{background:#1d222b;color:var(--ink)}.pill{color:#20293c}.pill.done,.pill.processing,.pill.failed{color:#fff}.btn,button.btn{border-color:#20293c;box-shadow:0 4px 0 #000}.btn.gold{color:#20293c}h1{-webkit-text-stroke-color:#20293c;text-shadow:0 4px 0 #000}.note{color:#20293c}}
+</style></head><body><main>
+<header><img src="${esc(base)}/icon-192.png" alt=""><div><h1>${esc(title)}</h1><p>Articles in. Audio out. Gone in ${Number(env.RETENTION_DAYS) || 30} days.</p></div></header>
+${note ? `<section class="panel note">${esc(note)}</section>` : ""}
+<section class="panel"><h2>Add an article</h2><form class="add" method="post" action="${esc(base)}/add"><input type="url" name="url" placeholder="https://example.com/article" required><button class="btn gold">Add</button></form></section>
 ${shortcut}
-<p>Podcast feed: <code>${esc(base)}/feed.xml</code></p>
-<ul>${rows || "<li>No items yet.</li>"}</ul>
+<section class="panel"><h2>Podcast feed</h2><p>Add this to your podcast app with "Follow by URL".</p><code>${esc(base)}/feed.xml</code><div class="row" style="margin-top:10px"><button type="button" class="btn" onclick="navigator.clipboard.writeText('${esc(base)}/feed.xml').then(()=>this.textContent='Copied!')">Copy feed URL</button></div></section>
+<ul>${rows || `<li class="card empty">Nothing yet. Share an article to start.</li>`}</ul>
+</main>
 <script>if("serviceWorker" in navigator)navigator.serviceWorker.register("${esc(base)}/sw.js").catch(()=>{})</script></body></html>`;
 }
 
@@ -331,6 +376,7 @@ async function handleFetch(req: Request, env: Env): Promise<Response> {
 		item.error = undefined;
 		await saveItem(env, item);
 		await env.JOBS.send({ id: item.id });
+		if (wantsHtml(req)) return Response.redirect(`${url.origin}/${env.TOKEN}`, 303);
 		return Response.json({ ok: true });
 	}
 	return new Response("Not found", { status: 404 });
@@ -507,11 +553,17 @@ async function addFailureClip(env: Env, item: Item): Promise<void> {
 }
 
 export default {
-	fetch: (req, env) =>
-		handleFetch(req, env).catch((e) => {
+	fetch: async (req, env) => {
+		const resp = await handleFetch(req, env).catch((e) => {
 			console.error(e);
 			return new Response("Server error", { status: 500 });
-		}),
+		});
+		// Web-based podcast players (Pocket Casts on desktop and web) load artwork and audio with fetch(), which needs CORS.
+		const headers = new Headers(resp.headers);
+		headers.set("Access-Control-Allow-Origin", "*");
+		headers.set("Access-Control-Expose-Headers", "Content-Length, Content-Range, Accept-Ranges");
+		return new Response(resp.body, { status: resp.status, statusText: resp.statusText, headers });
+	},
 
 	async queue(batch, env) {
 		for (const msg of batch.messages) {
