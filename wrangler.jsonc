@@ -16,7 +16,7 @@
 	"ai": { "binding": "AI" },
 	"triggers": { "crons": ["17 3 * * *"] },
 	"vars": {
-		"FEED_TITLE": "Podchast",
+		"FEED_TITLE": "🪎 PODCHAST NOISES",
 		"RETENTION_DAYS": "30",
 		// Edge TTS voice. List: https://speech.platform.bing.com/consumer/speech/synthesize/readaloud/voices/list?trustedclienttoken=6A5AA1D4EAFF4E9FB37E23D68491D6F4
 		"VOICE": "en-NZ-MitchellNeural",
@@ -26,7 +26,7 @@
 		"AI_MODEL": "@cf/deepgram/aura-2-en",
 		"AI_SPEAKER": "",
 		// iCloud link to the iOS Shortcut. Shows an "Add to share sheet" button on the status page.
-		"SHORTCUT_URL": "https://www.icloud.com/shortcuts/0f622097bb4a45f980ae39ba117be47b"
+		"SHORTCUT_URL": "https://www.icloud.com/shortcuts/14a6f33311db456291b26daf0d0a5133"
 	}
 	// Secret: TOKEN (run `npx wrangler secret put TOKEN`).
 }

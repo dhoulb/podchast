@@ -57,7 +57,7 @@ Your Worker is now at `https://podchast.<your-subdomain>.workers.dev`. Open `htt
 
 ### 5. Add the iOS Shortcut
 
-**Quick way:** open your status page on your iPhone. Tap **Copy MOUTH URL** on the 👄 MOUTH tab, then **Add to share sheet**. Paste the URL when Shortcuts asks for it. (The button opens [this shared Shortcut](https://www.icloud.com/shortcuts/0f622097bb4a45f980ae39ba117be47b).)
+**Quick way:** open your status page on your iPhone. Tap **Copy MOUTH URL** on the 👄 MOUTH tab, then **Add to share sheet**. Paste the URL when Shortcuts asks for it. (The button opens [this shared Shortcut](https://www.icloud.com/shortcuts/14a6f33311db456291b26daf0d0a5133).)
 
 **Or make it yourself:**
 
@@ -129,7 +129,7 @@ All private URLs contain the secret `TOKEN`. Keep them private.
 | `POST /add` | The same, with the token in an `Authorization: Bearer <TOKEN>` header. |
 | `GET /<TOKEN>` | Status page. Shows all items and has a form to add a URL or paste text. |
 | `GET /<TOKEN>/feed.xml` | Podcast feed. Add this to your podcast app. |
-| `GET /<TOKEN>/cover.jpg` | Podcast artwork (`assets/cover.jpg`, 1400x1400). |
+| `GET /cover-v4.jpg` | Podcast artwork (`assets/cover.jpg`, 1400x1400). Public, so podcast apps can fetch it. |
 | `GET /<TOKEN>/audio/<id>.mp3` | Episode audio (supports range requests). |
 | `POST /<TOKEN>/retry/<id>` | Try a failed item again. |
 | `POST /<TOKEN>/delete/<id>` | Delete an episode (the status page has a button). |
