@@ -26,7 +26,8 @@
 		"AI_MODEL": "@cf/deepgram/aura-2-en",
 		"AI_SPEAKER": "",
 		// iCloud link to the iOS Shortcut. Shows an "Add to share sheet" button on the status page.
-		"SHORTCUT_URL": "https://www.icloud.com/shortcuts/f463e3946d2b458a937e6a63fa85b45a"
+		"SHORTCUT_URL": "https://www.icloud.com/shortcuts/f463e3946d2b458a937e6a63fa85b45a",
+		"EMAIL_TO": "devour@podchast.dhoulb.com"
 	}
 	// Secret: TOKEN (run `npx wrangler secret put TOKEN`).
 }
