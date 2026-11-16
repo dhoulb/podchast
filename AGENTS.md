@@ -64,7 +64,7 @@ When you change `src/extract.ts`, run the harness on all `test/fixture*.html` fi
 `.github/workflows/deploy.yml` deploys on every push to `main`. Do not deploy by hand. All config is in GitHub (**Settings → Secrets and variables → Actions**). The README "Settings" table lists every name.
 
 1. `scripts/setup.mjs` finds the account and makes the R2 bucket, queue and lifecycle rules if they are missing.
-2. `wrangler deploy`. A repository variable with the name of a `wrangler.jsonc` var overrides it.
+2. `wrangler deploy`. A repository variable (or secret) with the name of a `wrangler.jsonc` var overrides it. Variables win.
 3. Secrets `TOKEN` and `EMAIL_FROM` are copied to the Worker (only if set in GitHub).
 4. `scripts/setup.mjs email` adds the Email Routing rule for `EMAIL_TO`, if the API token can.
 

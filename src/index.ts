@@ -18,7 +18,7 @@ export interface Env extends TtsEnv {
 	RETENTION_DAYS: string;
 	SHORTCUT_URL?: string; // iCloud link to the iOS Shortcut, shown on the status page.
 	EMAIL_TO?: string; // Address that Email Routing sends to this Worker, shown on the status page.
-	EMAIL_FROM?: string; // Secret. Sender addresses (or @domains) allowed to email Podchast, comma separated.
+	EMAIL_FROM?: string; // Secret. Sender addresses (or @domains) allowed to email Podchast. Separate them with commas, spaces or new lines, in any mix.
 }
 
 // Debug jobs: "edge" and "workers-ai" speak `text` (or a test sentence) into debug/<id>.mp3. The voice, EDGE_FORMAT and EDGE_PAUSE_MS can be set for one job.
