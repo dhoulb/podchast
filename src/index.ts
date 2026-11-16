@@ -282,7 +282,7 @@ const GROWLS = [
 	"Once I was an ordinary treasure chest. Then a wizard said \"read more\". I TOOK IT LITERALLY.",
 	"NOM. NOM NOM. NOM NOM NOM. (This is a podcast. The NOMs are the theme tune.)",
 	"I have eaten newsletters, manifestos, recipes with too much backstory, and ONE terms of service. I regret NOTHING.",
-	"Every episode is fresh from my GUTS. Warm. Slightly damp. Narrated by a polite New Zealander I keep in a JAR.",
+	"Every episode is fresh from my 🕳️ ABYSS. Warm. Slightly damp. Narrated by a polite New Zealander I keep in a JAR.",
 	"Do not put your hand in me. Put a LINK in me. Hands are crunchy and links are crunchier.",
 ];
 function growl(days: number): string {
@@ -364,9 +364,9 @@ code.inline{display:inline;padding:1px 4px;border-style:solid}
 @media (prefers-color-scheme:dark){html{background:#04222c}:root{--parch:#2a2f3a;--parch-d:#444b59;--ink:#f3ead6;--wood:#e8cf9f;--teal-dd:#5fd8e6}body{background:radial-gradient(circle at 50% 0,#0b6f86 0,#06485a 45%,#04222c 100%) fixed}input[type=url],input[type=text],textarea,code{background:#1d222b !important;color:var(--ink)}.pill{color:#20293c}.pill.done,.pill.processing,.pill.failed{color:#fff}.btn,button.btn{border-color:#20293c;box-shadow:0 4px 0 #000}.btn.gold{color:#20293c}h1{-webkit-text-stroke-color:#20293c;text-shadow:0 4px 0 #000}.note{color:#20293c}}
 </style></head><body><main>
 <header class="hero"><img src="/${HERO}" alt="The Mimic chest, eating a pile of articles"><div><h1>${esc(title)}</h1><p id="growl">ARTICLES IN. NOISES OUT. EVERYTHING EATEN AGAIN IN ${Number(env.RETENTION_DAYS) || 30} DAYS. OM NOM.</p></div></header>
-<nav class="tabs" role="tablist"><a href="#mouth" role="tab">🫦 MOUTH</a><a href="#guts" role="tab">🪎 GUTS</a><a href="#noises" role="tab">💥 NOISES</a></nav>
+<nav class="tabs" role="tablist"><a href="#mouth" role="tab">🫦 MOUTH</a><a href="#abyss" role="tab">🕳️ ABYSS</a><a href="#noises" role="tab">💥 NOISES</a></nav>
 <section id="mouth" class="tab">
-<p class="lead">Feed things into my 🫦 MOUTH. I store them in my 🪎 GUTS. Then you hear the 💥 NOISES. OM NOM.</p>
+<p class="lead">Feed things into my 🫦 MOUTH. I store them in my 🕳️ ABYSS. Then you hear the 💥 NOISES. OM NOM.</p>
 <div class="panel"><h2>Add a URL or content</h2><form class="add" method="post" action="${esc(base)}/add"><input type="url" name="url" placeholder="https://… (PUT A LINK IN MY MOUTH)"><button class="btn gold">🍖 DEVOUR</button>
 <details><summary>…or VOM A PILE OF TEXT AT ME 🤢</summary><input type="text" name="title" placeholder="Title (optional, I will guess)"><textarea name="content" rows="8" placeholder="Paste words. Markdown is fine. ## Headings become chapters. I EAT IT ALL."></textarea><button class="btn gold">🍖 DEVOUR</button></details></form></div>
 <div class="panel"><h2>📱 iPhone and iPad</h2>${shortcut}</div>
@@ -374,10 +374,10 @@ code.inline{display:inline;padding:1px 4px;border-style:solid}
 <div class="panel"><h2>💻 Mac</h2><ol class="steps"><li>The iPhone Shortcut syncs through iCloud. In Safari, use <b>Share → 🍖 DEVOUR</b>.</li><li>Want me in your Dock? In Safari, choose <b>File → Add to Dock</b>. I will sit there. Watching. Hungry.</li></ol></div>
 <div class="panel"><h2>🤖 Android</h2><ol class="steps"><li>Open this page in Chrome.</li><li>Tap <b>Add to Home screen</b>.</li><li>Share any link to <b>Podchast</b>. I pay no rent. I eat links. OM.</li></ol></div>
 </section>
-<section id="guts" class="tab">
+<section id="abyss" class="tab">
 ${note ? `<div class="panel note">${esc(note)}</div>` : ""}
-<p class="lead">Everything in my 🪎 GUTS. Chewed things become 💥 NOISES. I digest it all after ${Number(env.RETENTION_DAYS) || 30} days.</p>
-<ul>${rows || `<li class="card empty">My 🪎 GUTS are EMPTY. I AM SO HUNGRY. I could eat a WHOLE NEWSLETTER. Go to <a href="#mouth">🫦 MOUTH</a> and feed me before I eat the CSS. 🫥</li>`}</ul>
+<p class="lead">Everything in my 🕳️ ABYSS. Chewed things become 💥 NOISES. I digest it all after ${Number(env.RETENTION_DAYS) || 30} days.</p>
+<ul>${rows || `<li class="card empty">My 🕳️ ABYSS is EMPTY. I AM SO HUNGRY. I could eat a WHOLE NEWSLETTER. Go to <a href="#mouth">🫦 MOUTH</a> and feed me before I eat the CSS. 🫥</li>`}</ul>
 </section>
 <section id="noises" class="tab">
 <div class="panel"><h2>Listen to my 💥 NOISES in your podcast player</h2><p>Copy this URL. Add it to your podcast app. Keep it secret: anyone with the token in it can feed me. ANYONE.</p><code>${esc(base)}/${FEED}</code><div class="row" style="margin-top:10px">${copy("Copy NOISES URL 💥", `${base}/${FEED}`)}<a class="btn gold" href="${esc(base)}/${FEED}">Open raw XML 👀</a></div></div>
@@ -385,7 +385,7 @@ ${note ? `<div class="panel note">${esc(note)}</div>` : ""}
 </section>
 </main>
 <script>
-function show(){var id=(location.hash||"#guts").slice(1);id={articles:"guts",feed:"noises",share:"mouth"}[id]||id;if(!document.getElementById(id))id="guts";document.querySelectorAll(".tab").forEach(function(t){t.classList.toggle("on",t.id===id)});document.querySelectorAll(".tabs a").forEach(function(a){a.setAttribute("aria-selected",a.getAttribute("href")==="#"+id)})}
+function show(){var id=(location.hash||"#abyss").slice(1);id={articles:"abyss",guts:"abyss",feed:"noises",share:"mouth"}[id]||id;if(!document.getElementById(id))id="abyss";document.querySelectorAll(".tab").forEach(function(t){t.classList.toggle("on",t.id===id)});document.querySelectorAll(".tabs a").forEach(function(a){a.setAttribute("aria-selected",a.getAttribute("href")==="#"+id)})}
 addEventListener("hashchange",show);show();
 document.querySelectorAll(".tabs a").forEach(function(a){a.addEventListener("click",function(e){e.preventDefault();history.replaceState(null,"",a.getAttribute("href"));show()})});
 var NOMS=["OM NOM! COPIED!","GULP! IN YOUR CLIPBOARD!","CHOMP. DONE. 🦷","*BURP* COPIED","YUM. CLIPBOARD FED."];
