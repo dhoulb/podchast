@@ -37,7 +37,7 @@ Still ask Dave before you:
 
 - Worker: `https://podchast.dhoulb.workers.dev`
 - Private routes start with `/<TOKEN>/`: status page, `noises.xml` (feed; `feed.xml` is an old alias), `add`, `audio/<id>.mp3`, `retry/<id>`, `delete/<id>`, `manifest.webmanifest`, `sw.js`, icons.
-- Failed items show in the feed as "🤮 SPAT OUT: …" with one shared clip, `audio/failed-v2.mp3`, made on demand.
+- Failed items show in the feed as "🤮 SPAT OUT: …" with one shared clip, `audio/failed-v3.mp3`, made on demand.
 - `TOKEN` is a Worker secret. Its source is the `TOKEN` GitHub Actions secret; each deploy copies it to Cloudflare. Never write it into the repo, commits, PRs or logs.
 
 ## Commands
