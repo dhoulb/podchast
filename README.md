@@ -12,31 +12,23 @@ You need a Cloudflare account, a GitHub account and an iPhone. You set everythin
 
 Fork this repository.
 
-### 2. Make two secrets
+### 2. Settings
 
-In your fork, open **Settings → Secrets and variables → Actions**. Add these repository secrets:
+In your fork, open **Settings → Secrets and variables → Actions**. Add your settings there. If you put a setting on the wrong tab (a variable as a secret, or a secret as a variable), it still works.
 
-- `CLOUDFLARE_API_KEY`: a [Cloudflare API token](https://dash.cloudflare.com/profile/api-tokens). Use the **Edit Cloudflare Workers** template. Add **Workers R2 Storage: Edit** and **Queues: Edit** if the template does not have them.
-- `TOKEN`: the password for your feed. It is also part of every private URL. Make one with `openssl rand -base64 24 | tr '+/' '-_'` and keep a copy in your password manager.
-
-### 3. Deploy
-
-Open the **Actions** tab, then **Deploy**, then **Run workflow**. Later, each push to `main` deploys again.
-
-The deploy makes the R2 bucket `podchast`, the queue `podchast-jobs` and the R2 lifecycle rules, if they are missing. Then it deploys the Worker and copies your secrets to it.
-
-Your Worker is now at `https://podchast.<your-subdomain>.workers.dev`. Open `https://podchast.<your-subdomain>.workers.dev/<TOKEN>` to see the status page.
-
-### 4. Settings
-
-All settings are optional. Add them in the same place, then deploy again.
+**Required.** Add these two repository secrets:
 
 | Name | Kind | Use |
 | --- | --- | --- |
-| `CLOUDFLARE_API_KEY` | Secret | Cloudflare API token (required). |
-| `TOKEN` | Secret | Feed password (required). |
-| `EMAIL_FROM` | Secret | Senders that may email Podchast. Separate them with commas, spaces or new lines, in any mix. `@example.com` allows a whole domain. See step 7. |
-| `EMAIL_TO` | Variable | The address that Podchast gets email at, for example `devour@podchast.example.com`. The status page shows it. |
+| `CLOUDFLARE_API_KEY` | Secret | A [Cloudflare API token](https://dash.cloudflare.com/profile/api-tokens). Use the **Edit Cloudflare Workers** template. Add **Workers R2 Storage: Edit** and **Queues: Edit** if the template does not have them. |
+| `TOKEN` | Secret | The password for your feed. It is also part of every private URL. Make one with `openssl rand -base64 24 \| tr '+/' '-_'` and keep a copy in your password manager. |
+
+**Optional.** Add these only if you want to change the default. The defaults are in `wrangler.jsonc`.
+
+| Name | Kind | Use |
+| --- | --- | --- |
+| `EMAIL_TO` | Variable | The address that Podchast gets email at, for example `devour@podchast.example.com`. The status page shows it. If it is not set, the deploy does not set up email. See step 6. |
+| `EMAIL_FROM` | Secret | Senders that may email Podchast. Separate them with commas, spaces or new lines, in any mix. `@example.com` allows a whole domain. |
 | `VOICE` | Variable | Edge voice. Default `en-US-BrianNeural`. See [TTS engine](#tts-engine). |
 | `RATE` | Variable | Speech speed, for example `+10%`. Default `+0%`. |
 | `PITCH` | Variable | Voice pitch, for example `-5%`. Default `-8%`. |
@@ -44,11 +36,19 @@ All settings are optional. Add them in the same place, then deploy again.
 | `FEED_TITLE` | Variable | Podcast name. Default `🍖 PODCHAST`. |
 | `RETENTION_DAYS` | Variable | Days to keep audio. Default `90`. The R2 lifecycle rule follows it. |
 | `TTS_ENGINE`, `EDGE_FORMAT`, `AI_MODEL`, `AI_SPEAKER` | Variable | TTS settings. See [TTS engine](#tts-engine). |
-| `CLOUDFLARE_ACCOUNT_ID` | Variable | Only if your API token can see more than one Cloudflare account. |
+| `CLOUDFLARE_ACCOUNT_ID` | Variable | Not needed in most cases: the deploy gets the account from the API token. Set it only if the token can see more than one Cloudflare account. |
 
-The defaults are in `wrangler.jsonc`. A secret that you do not set in GitHub is not changed on the Worker. If you put a setting on the wrong tab (a variable as a secret, or a secret as a variable), it still works.
+When you change a setting, deploy again. A secret that you do not set in GitHub is not changed on the Worker.
 
-### 5. Add the iOS Shortcut
+### 3. Deploy
+
+Open the **Actions** tab, then **Deploy**, then **Run workflow**. Later, each push to `main` deploys again.
+
+The deploy makes the R2 bucket `podchast`, the queue `podchast-jobs` and the R2 lifecycle rules, if they are missing. Then it deploys the Worker and copies your settings to it.
+
+Your Worker is now at `https://podchast.<your-subdomain>.workers.dev`. Open `https://podchast.<your-subdomain>.workers.dev/<TOKEN>` to see the status page.
+
+### 4. Add the iOS Shortcut
 
 **Quick way:** open your status page on your iPhone. Tap **Copy MOUTH URL** on the 🫦 MOUTH tab, then **Add 🍖 DEVOUR shortcut**. Paste the URL when Shortcuts asks for it. (The button opens [this shared Shortcut](https://www.icloud.com/shortcuts/f463e3946d2b458a937e6a63fa85b45a).)
 
@@ -71,7 +71,7 @@ To share your own Shortcut: in the Shortcut, tap **i**, then **Setup**, and add 
 
 **Mac:** Shortcuts sync through iCloud. The Podchast Shortcut shows in the **Share** menu in Safari on your Mac too.
 
-### 6. Add the feed to your podcast app
+### 5. Add the feed to your podcast app
 
 Add `https://podchast.<your-subdomain>.workers.dev/<TOKEN>/noises.xml` as a feed by URL.
 
@@ -79,7 +79,7 @@ Add `https://podchast.<your-subdomain>.workers.dev/<TOKEN>/noises.xml` as a feed
 - **Overcast**: **+**, then **Add URL**.
 - **Pocket Casts**: Search, then paste the URL.
 
-### 7. Email in (optional)
+### 6. Email in (optional)
 
 You can email or forward things to Podchast. A short email with a link adds that link. A longer email becomes an episode, and its subject is the title. Each attached PDF becomes an episode. PDF links work too.
 
