@@ -50,13 +50,14 @@ export async function fetchArticle(url: string, pdf?: (bytes: ArrayBuffer, url: 
 type Block = { tag: string; text: string; body: boolean; article: boolean; main: boolean; chrome: boolean };
 
 const BLOCKS = "p, h1, h2, h3, h4, h5, h6, li, blockquote, dd";
+// React streaming puts late HTML in <div hidden id="S:0"> and moves it into the page with a script (X articles do this). That is not chrome.
 const CHROME =
-	"nav, header, footer, aside, form, figure, figcaption, button, dialog, menu, [role=navigation], [role=banner], [role=contentinfo], [role=complementary], [aria-hidden=true], [hidden], .comments, #comments, .related, .newsletter, .share, .social, .advert, .ad, .sidebar, .footnotes";
+	"nav, header, footer, aside, form, figure, figcaption, button, dialog, menu, [role=navigation], [role=banner], [role=contentinfo], [role=complementary], [aria-hidden=true], [hidden]:not([id^='S:']), .comments, #comments, .related, .newsletter, .share, .social, .advert, .ad, .sidebar, .footnotes";
 const SKIP = "script, style, noscript, template, svg, math, iframe, select, textarea, sup, pre";
 // Text in tables is left out of blocks, but kept for the plain-text fallback (old sites use layout tables).
 const TABLE = "table";
 const BODY_SEL =
-	"[itemprop=articleBody], .article-body, .article__body, .post-content, .entry-content, .post-body, .story-body, .content-body, #article-body, .c-entry-content, .rich-text";
+	"[itemprop=articleBody], .article-body, .article__body, .post-content, .entry-content, .post-body, .story-body, .content-body, #article-body, .c-entry-content, .rich-text, .x-article-body";
 
 export async function extractArticle(resp: Response, url: string): Promise<Article> {
 	const meta: Record<string, string> = {};
@@ -68,18 +69,25 @@ export async function extractArticle(resp: Response, url: string): Promise<Artic
 	const blocks: Block[] = [];
 	let cur: Block | null = null;
 
+	// One element can match several counters (e.g. <svg aria-hidden="true"> is both chrome and skip).
+	// An element has only one end tag handler: each onEndTag() call replaces the last one.
+	// So each handler closes every counter that this element opened. "*" runs first and starts the list.
+	let open: (keyof typeof depth)[] = [];
 	const counter = (key: keyof typeof depth) => ({
 		element(el: Element) {
 			// Self-closing tags (e.g. <path aria-hidden="true"/> in SVG) never get an end tag.
 			const e = el as Element & { selfClosing?: boolean; canHaveContent?: boolean };
 			if (e.selfClosing === true || e.canHaveContent === false) return;
 			depth[key]++;
+			const keys = open;
+			keys.push(key);
 			try {
 				el.onEndTag(() => {
-					depth[key]--;
+					for (const k of keys) depth[k]--;
 				});
 			} catch {
 				depth[key]--; // Void element: no end tag.
+				keys.pop();
 			}
 		},
 	});
@@ -92,6 +100,7 @@ export async function extractArticle(resp: Response, url: string): Promise<Artic
 	};
 
 	const rewriter = new HTMLRewriter()
+		.on("*", { element: () => void (open = []) })
 		.on("html", { element: (el) => void (lang = el.getAttribute("lang") ?? undefined) })
 		.on("meta", {
 			element(el) {
