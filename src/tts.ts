@@ -77,6 +77,28 @@ async function aiAll(env: TtsEnv, text: string): Promise<Spoken> {
 /** pieces: the MP3 in order, to join once. vtt is a WebVTT transcript with one cue for each sentence. */
 export type Speech = { pieces: Uint8Array[]; seconds: number; mp3: Uint8Array; engine: Engine; edgeError?: string; marks: (needle: string) => number | undefined; vtt: string };
 
+// Text for one chunk job. Edge takes about 4,000 bytes of SSML for each request.
+export const CHUNK_CHARS = 3000;
+
+/** Speak one chunk (CHUNK_CHARS or less) for a chunk job. Edge TTS first, then Workers AI if TTS_ENGINE allows. */
+export async function speakChunk(env: TtsEnv, text: string): Promise<{ mp3: Uint8Array; seconds: number; cues?: Cue[]; engine: Engine; edgeError?: string }> {
+	const out = (s: Spoken, engine: Engine, edgeError?: string) => {
+		const pieces = s.audio.flat();
+		return { mp3: concat(pieces), seconds: s.audio.reduce((t, p) => t + piecesSeconds(p), 0), cues: s.cues?.flat(), engine, edgeError };
+	};
+	if (env.TTS_ENGINE !== "workers-ai") {
+		try {
+			const r = await retry(() => edgeSynthesise(text, { voice: env.VOICE, rate: env.RATE, pitch: env.PITCH, format: env.EDGE_FORMAT, pause: Number(env.EDGE_PAUSE_MS) || 0 }), 2);
+			return out({ chunks: [text], audio: [r.audio], cues: [r.cues] }, "edge");
+		} catch (e) {
+			if (env.TTS_ENGINE === "edge-only") throw e;
+			const edgeError = String((e as Error)?.message ?? e);
+			return out(await aiAll(env, text), "workers-ai", edgeError);
+		}
+	}
+	return out(await aiAll(env, text), "workers-ai");
+}
+
 /** Speak the text. Uses Edge TTS first, then Workers AI if Edge fails. */
 export async function speak(env: TtsEnv, text: string): Promise<Speech> {
 	const done = (s: Spoken, engine: Engine, edgeError?: string): Speech => {
@@ -113,11 +135,16 @@ export async function speak(env: TtsEnv, text: string): Promise<Speech> {
  * estimated from the character position, which is accurate to a few seconds.
  */
 function timeFinder({ chunks, audio }: Spoken): (needle: string) => number | undefined {
+	return chunkTimes(chunks, audio.map(piecesSeconds));
+}
+
+/** Like timeFinder, from the text and length (seconds) of each chunk. */
+export function chunkTimes(chunks: string[], seconds: number[]): (needle: string) => number | undefined {
 	const starts: number[] = [];
 	let t = 0;
-	for (const a of audio) {
+	for (const len of seconds) {
 		starts.push(t);
-		t += piecesSeconds(a);
+		t += len;
 	}
 	let ci = 0;
 	let from = 0;
@@ -127,7 +154,7 @@ function timeFinder({ chunks, audio }: Spoken): (needle: string) => number | und
 			if (pos < 0) continue;
 			ci = i;
 			from = pos + needle.length;
-			return starts[i] + (pos / chunks[i].length) * piecesSeconds(audio[i]);
+			return starts[i] + (pos / chunks[i].length) * seconds[i];
 		}
 		return undefined;
 	};
@@ -140,10 +167,14 @@ function timeFinder({ chunks, audio }: Spoken): (needle: string) => number | und
  * the length of each sentence.
  */
 export function webVtt({ chunks, audio, cues }: Spoken): string {
+	return chunkVtt(chunks, audio.map(piecesSeconds), cues);
+}
+
+/** Like webVtt, from the text, length (seconds) and sentence times of each chunk. */
+export function chunkVtt(chunks: string[], seconds: number[], cues?: (Cue[] | undefined)[]): string {
 	const out: Cue[] = [];
 	let t = 0;
-	audio.forEach((a, i) => {
-		const len = piecesSeconds(a);
+	seconds.forEach((len, i) => {
 		const own = cues?.[i]?.length ? cues[i] : estimateCues(chunks[i], len);
 		for (const c of own) {
 			const start = Math.max(t + Math.min(c.start, len), out.at(-1)?.end ?? 0);
