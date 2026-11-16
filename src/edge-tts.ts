@@ -21,9 +21,12 @@ export function escapeXml(s: string): string {
 	return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-export type EdgeOptions = { voice: string; rate?: string; pitch?: string; volume?: string };
+// format: an Edge output format, e.g. "audio-24khz-48kbitrate-mono-mp3".
+// pause: milliseconds of silence between paragraphs (blank lines). 0 means none.
+export type EdgeOptions = { voice: string; rate?: string; pitch?: string; volume?: string; format?: string; pause?: number };
+export const EDGE_DEFAULT_FORMAT = "audio-24khz-48kbitrate-mono-mp3";
 
-/** Synthesise one chunk of plain text (≤ ~4000 bytes after escaping). Returns MP3 bytes (24kHz 48kbps mono). */
+/** Synthesise one chunk of plain text (≤ ~4000 bytes after escaping). Returns MP3 bytes (by default 24kHz 48kbps mono). */
 export async function edgeSynthesise(text: string, opts: EdgeOptions, timeoutMs = 60_000): Promise<Uint8Array> {
 	const url =
 		`${WSS_URL}&ConnectionId=${uuid()}` +
@@ -85,12 +88,12 @@ export async function edgeSynthesise(text: string, opts: EdgeOptions, timeoutMs 
 
 	ws.send(
 		`X-Timestamp:${dateString()}\r\nContent-Type:application/json; charset=utf-8\r\nPath:speech.config\r\n\r\n` +
-			`{"context":{"synthesis":{"audio":{"metadataoptions":{"sentenceBoundaryEnabled":"false","wordBoundaryEnabled":"false"},"outputFormat":"audio-24khz-48kbitrate-mono-mp3"}}}}\r\n`,
+			`{"context":{"synthesis":{"audio":{"metadataoptions":{"sentenceBoundaryEnabled":"false","wordBoundaryEnabled":"false"},"outputFormat":"${opts.format || EDGE_DEFAULT_FORMAT}"}}}}\r\n`,
 	);
 	const ssml =
 		`<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='en-US'>` +
 		`<voice name='${opts.voice}'><prosody pitch='${opts.pitch ?? "+0Hz"}' rate='${opts.rate ?? "+0%"}' volume='${opts.volume ?? "+0%"}'>` +
-		`${escapeXml(text)}</prosody></voice></speak>`;
+		`${speechText(text, opts.pause)}</prosody></voice></speak>`;
 	ws.send(
 		`X-RequestId:${uuid()}\r\nContent-Type:application/ssml+xml\r\nX-Timestamp:${dateString()}Z\r\nPath:ssml\r\n\r\n${ssml}`,
 	);
@@ -98,6 +101,12 @@ export async function edgeSynthesise(text: string, opts: EdgeOptions, timeoutMs 
 	await done;
 	if (!parts.length) throw new Error("Edge TTS: no audio received");
 	return concat(parts);
+}
+
+/** Escape the text, and put a short silence between paragraphs. */
+function speechText(text: string, pause = 0): string {
+	const safe = escapeXml(text);
+	return pause > 0 ? safe.replace(/\n\s*\n/g, ` <break time='${Math.min(pause, 3000)}ms'/> `) : safe;
 }
 
 export function concat(parts: Uint8Array[]): Uint8Array {
