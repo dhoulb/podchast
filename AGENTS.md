@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Podchast turns article links into a private podcast. Dave shares a link from an iOS Shortcut. A Cloudflare Worker gets the article, reads it aloud, and adds the MP3 to a private RSS feed. Episodes expire after 30 days.
+Podchast turns article links into a private podcast. Dave shares a link from an iOS Shortcut. A Cloudflare Worker gets the article, reads it aloud, and adds the MP3 to a private RSS feed. Audio expires after 90 days. The text stays forever, as a read-later archive.
 
 ## Workflow: fully automated
 
@@ -20,11 +20,15 @@ Still ask Dave before you:
 ## Stack
 
 - Cloudflare Workers (Free plan), TypeScript, no runtime dependencies.
-- R2 bucket `podchast`: `items/<id>` (item JSON, also in `customMetadata.item`), `audio/<id>.mp3` and `parts/<id>.txt` (text of one part of a long article). Lifecycle rules delete all three prefixes after 31 days.
+- R2 bucket `podchast`:
+  - `items/<id>`: item JSON, also in `customMetadata.item`. Kept forever.
+  - `read/<id>.md` (article text) and `read/<id>.pdf` (original PDF). Kept forever. Shown at `/<TOKEN>/read/<id>`.
+  - `audio/<id>.mp3`: deleted after `RETENTION_DAYS` (90) by the cron. Lifecycle rule: 91 days. The item then gets `gone: true` and shows as "🍖 MEAT". Re-chomp reads `read/<id>.md` and makes the audio again.
+  - `parts/<id>.txt`: text of one part of a long article. Lifecycle rule: 31 days.
 - Email in: the Worker `email()` handler (`src/mail.ts` reads the MIME). Email Routing on the subdomain `podchast.dhoulb.com` sends `devour@` to the Worker. Only senders in the `EMAIL_FROM` secret are accepted. PDFs (attachments and links) become text with Workers AI `toMarkdown`.
-- `/add` takes a `url`, or `content` (text or markdown) with an optional `title`. Text is kept in `parts/<id>.txt` until its job reads it (`item.text` is set).
+- `/add` takes a `url`, or `content` (text or markdown) with an optional `title`. Text is kept in `read/<id>.md` (`item.text` is set).
 - Queue `podchast-jobs`: one job per episode. The consumer gets the article, does TTS and writes the MP3. Articles over 40,000 characters (`PART_CHARS`) become several episodes ("Part 1 of 3"), one job each.
-- Cron `17 3 * * *`: deletes old items.
+- Cron `17 3 * * *`: deletes old audio and marks those items `gone`.
 - TTS: Microsoft Edge "Read aloud" voices over a WebSocket (`src/edge-tts.ts`, `src/edge-drm.ts`). Workers AI `@cf/deepgram/aura-2-en` is the fallback (`src/tts.ts`).
 - Article extraction: HTMLRewriter heuristics (`src/extract.ts`).
 - Routes and queue handler: `src/index.ts`. Chapter tags: `src/id3.ts`. Cover art: `assets/cover.jpg` (1400x1400) and web app icons `assets/icon-*.png`, bundled as bytes. The feed links to the public `/cover-v5.jpg`. Change `COVER` in `src/index.ts` when the art changes, so podcast apps fetch it again.

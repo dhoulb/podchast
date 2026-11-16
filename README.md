@@ -1,6 +1,6 @@
 # Podchast
 
-Podchast turns web articles into a private podcast. Share a link from your iPhone. A Cloudflare Worker gets the article, reads it aloud, and puts the MP3 in a private podcast feed. Episodes go away after 30 days.
+Podchast turns web articles into a private podcast. Share a link from your iPhone. A Cloudflare Worker gets the article, reads it aloud, and puts the MP3 in a private podcast feed. Audio goes away after 90 days. The text (and the original PDF) stays forever, so Podchast is also a permanent read-later list.
 
 Everything runs on Cloudflare: Workers, Queues, R2 and (as a fallback) Workers AI. The Workers Free plan is enough.
 
@@ -19,8 +19,7 @@ npm ci
 npx wrangler login
 npx wrangler r2 bucket create podchast
 npx wrangler queues create podchast-jobs
-npx wrangler r2 bucket lifecycle add podchast expire-audio audio/ --expire-days 31
-npx wrangler r2 bucket lifecycle add podchast expire-items items/ --expire-days 31
+npx wrangler r2 bucket lifecycle add podchast expire-audio audio/ --expire-days 91
 npx wrangler r2 bucket lifecycle add podchast expire-parts parts/ --expire-days 31
 ```
 
@@ -109,7 +108,8 @@ You can email or forward things to Podchast. A short email with a link adds that
    Articles longer than 40,000 characters (about 40 minutes) become several episodes: "Part 1 of 3", "Part 2 of 3" and so on. Each part is its own queue job.
 6. `GET /<TOKEN>/noises.xml` shows the finished items as a podcast feed.
 7. If an article fails three times, the feed gets a short "🤮 SPAT OUT: …" episode. Its notes give the reason.
-8. An R2 lifecycle rule deletes files after 31 days. The feed hides items after 30 days. A daily cron also deletes old files.
+8. The consumer keeps the article text in `read/<id>.md`, and the original PDF in `read/<id>.pdf`. These files stay forever. `GET /<TOKEN>/read/<id>` shows the text as a page.
+9. A daily cron deletes audio after 90 days. An R2 lifecycle rule (91 days) is the backup. The item stays on the status page as "🍖 MEAT", with a **Read** button. **Re-chomp** makes the audio again from the kept text.
 
 ## TTS engine
 
@@ -165,4 +165,4 @@ curl -X POST --data-binary @fixture.html http://127.0.0.1:8799/
 
 - The extractor is a simple heuristic. Most news sites and blogs work. Pages that need JavaScript or a login do not work.
 - On the Workers Free plan, one job can make 50 outbound requests. Long articles are split into episodes of about 40,000 characters, so there is no length limit.
-- Retention is set by `RETENTION_DAYS` (default 30) and the R2 lifecycle rules.
+- Audio retention is set by `RETENTION_DAYS` (default 90) and the R2 lifecycle rule on `audio/`. Items and `read/` files have no lifecycle rule.
