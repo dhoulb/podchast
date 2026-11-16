@@ -7,7 +7,7 @@ import { type Article, chunkText, fetchArticle } from "./extract";
 import { readMail } from "./mail";
 import { concat } from "./edge-tts";
 import { type Chapter, id3Tag } from "./id3";
-import { mp3Duration, speak, type TtsEnv } from "./tts";
+import { isPermanent, mp3Duration, speak, type TtsEnv } from "./tts";
 
 export interface Env extends TtsEnv {
 	AUDIO: R2Bucket;
@@ -740,10 +740,12 @@ async function processJob(env: Env, job: Job, attempt: number): Promise<void> {
 		const msg = String((e as Error)?.message ?? e);
 		console.error(`Job ${item.id} attempt ${attempt} failed:`, msg);
 		item.error = msg;
-		item.status = attempt >= MAX_ATTEMPTS ? "failed" : "queued";
-		if (item.status === "failed") await addFailureClip(env, item);
+		// Do not retry an error that a retry cannot fix. Each retry runs Edge TTS again.
+		const last = attempt >= MAX_ATTEMPTS || isPermanent(e);
+		item.status = last ? "failed" : "queued";
+		if (last) await addFailureClip(env, item);
 		await saveItem(env, item);
-		if (attempt < MAX_ATTEMPTS) throw e;
+		if (!last) throw e;
 	}
 }
 

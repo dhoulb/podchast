@@ -13,10 +13,19 @@ async function retry<T>(fn: () => Promise<T>, tries = 3): Promise<T> {
 			return await fn();
 		} catch (e) {
 			last = e;
+			if (isPermanent(e)) break;
 			await new Promise((r) => setTimeout(r, 1000 * 2 ** i));
 		}
 	}
 	throw last;
+}
+
+/**
+ * An error that a retry cannot fix: the Workers AI daily free allocation is used
+ * up (it resets at 00:00 UTC), or the page or PDF has no text to read.
+ */
+export function isPermanent(e: unknown): boolean {
+	return /"internalCode":4006|daily free allocation|Could not find article text|has no text I can read/.test(String((e as Error)?.message ?? e));
 }
 
 /** Audio for each text chunk, in order. Chunk timings let the caller place chapter marks. cues[i] are the sentence times in chunk i, if the engine gives them. */
@@ -32,7 +41,7 @@ async function edgeAll(env: TtsEnv, text: string): Promise<Spoken> {
 		while (next < chunks.length) {
 			const i = next++;
 			const t = Date.now();
-			const out = await retry(() => edgeSynthesise(chunks[i], { voice: env.VOICE, rate: env.RATE, pitch: env.PITCH, format: env.EDGE_FORMAT, pause: Number(env.EDGE_PAUSE_MS) || 0 }, 90_000), 3);
+			const out = await retry(() => edgeSynthesise(chunks[i], { voice: env.VOICE, rate: env.RATE, pitch: env.PITCH, format: env.EDGE_FORMAT, pause: Number(env.EDGE_PAUSE_MS) || 0 }), 3);
 			parts[i] = out.audio;
 			cues[i] = out.cues;
 			console.log(`Edge TTS part ${i + 1}/${chunks.length}: ${parts[i].length} bytes, ${cues[i].length} sentences in ${Date.now() - t} ms`);
