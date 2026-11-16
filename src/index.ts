@@ -642,7 +642,9 @@ const html = (body: string) => new Response(body, { headers: { "Content-Type": "
 
 // ---------- Queue consumer ----------
 
-const MAX_ATTEMPTS = 3;
+// Edge TTS can be slow or down for a while. Retry gaps: 2, 4, 8, 16, 30, 30 min (see retryDelay).
+const MAX_ATTEMPTS = 7;
+const retryDelay = (attempt: number) => Math.min(120 * 2 ** (attempt - 1), 1800);
 
 /** Debug job: speak one sentence with one engine and save the result under debug/. */
 async function debugJob(env: Env, job: Job): Promise<void> {
@@ -961,7 +963,7 @@ export default {
 				await processJob(env, msg.body, msg.attempts);
 				msg.ack();
 			} catch {
-				msg.retry({ delaySeconds: 60 * msg.attempts });
+				msg.retry({ delaySeconds: retryDelay(msg.attempts) });
 			}
 		}
 	},
