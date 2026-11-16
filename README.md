@@ -35,7 +35,7 @@ All settings are optional. Add them in the same place, then deploy again.
 | --- | --- | --- |
 | `CLOUDFLARE_API_KEY` | Secret | Cloudflare API token (required). |
 | `TOKEN` | Secret | Feed password (required). |
-| `EMAIL_FROM` | Secret | Senders that may email Podchast, comma separated. `@example.com` allows a whole domain. See step 7. |
+| `EMAIL_FROM` | Secret | Senders that may email Podchast. Separate them with commas, spaces or new lines, in any mix. `@example.com` allows a whole domain. See step 7. |
 | `EMAIL_TO` | Variable | The address that Podchast gets email at, for example `devour@podchast.example.com`. The status page shows it. |
 | `VOICE` | Variable | Edge voice. Default `en-US-BrianNeural`. See [TTS engine](#tts-engine). |
 | `RATE` | Variable | Speech speed, for example `+10%`. Default `+0%`. |
