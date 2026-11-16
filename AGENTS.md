@@ -26,7 +26,7 @@ Still ask Dave before you:
   - `audio/<id>.vtt`: timed transcript (one cue for each sentence, from Edge TTS sentence boundaries). The feed links it with `<podcast:transcript>`, so Pocket Casts shows it live. It is deleted with the MP3.
   - `audio/<id>.mp3`: deleted after `RETENTION_DAYS` (90) by the cron. Lifecycle rule: 91 days. The item then gets `gone: true` and shows as "🍖 MEAT". Re-chomp reads `read/<id>.md` and makes the audio again.
   - `parts/<id>.txt`: text of one part of a long article. Lifecycle rule: 31 days.
-- Email in: the Worker `email()` handler (`src/mail.ts` reads the MIME). Email Routing on the subdomain `podchast.dhoulb.com` sends `devour@` to the Worker. Only senders in the `EMAIL_FROM` secret are accepted. PDFs (attachments and links) become text with Workers AI `toMarkdown`.
+- Email in: the Worker `email()` handler (`src/mail.ts` reads the MIME). Email Routing on the subdomain `podchast.dhoulb.com` sends `devour@` to the Worker. Only senders in the `EMAIL_FROM` secret are accepted. The address is the `EMAIL_TO` GitHub variable. PDFs (attachments and links) become text with Workers AI `toMarkdown`.
 - `/add` takes a `url`, or `content` (text or markdown) with an optional `title`. Text is kept in `read/<id>.md` (`item.text` is set).
 - Queue `podchast-jobs`: one job per episode. The consumer gets the article, does TTS and writes the MP3. Articles over 40,000 characters (`PART_CHARS`) become several episodes ("Part 1 of 3"), one job each.
 - Cron `17 3 * * *`: deletes old audio and marks those items `gone`.
@@ -55,7 +55,14 @@ When you change `src/extract.ts`, run the harness on all `test/fixture*.html` fi
 
 ## Deploy
 
-`.github/workflows/deploy.yml` runs `wrangler deploy` on every push to `main`, with the repository secret `CLOUDFLARE_API_KEY`. It then copies the `TOKEN` repository secret to the Worker. Optional repository variables `VOICE`, `RATE` and `SHORTCUT_URL` override the defaults in `wrangler.jsonc`. Do not deploy by hand.
+`.github/workflows/deploy.yml` deploys on every push to `main`. Do not deploy by hand. All config is in GitHub (**Settings → Secrets and variables → Actions**). The README "Settings" table lists every name.
+
+1. `scripts/setup.mjs` finds the account and makes the R2 bucket, queue and lifecycle rules if they are missing.
+2. `wrangler deploy`. A repository variable with the name of a `wrangler.jsonc` var overrides it.
+3. Secrets `TOKEN` and `EMAIL_FROM` are copied to the Worker (only if set in GitHub).
+4. `scripts/setup.mjs email` adds the Email Routing rule for `EMAIL_TO`, if the API token can.
+
+Keep personal values (account ID, email addresses) out of the repo. Put them in GitHub variables or secrets.
 
 ## Limits to keep in mind
 

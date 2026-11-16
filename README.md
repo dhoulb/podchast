@@ -6,53 +6,47 @@ Everything runs on Cloudflare: Workers, Queues and R2. The Workers Free plan is 
 
 ## Set up your own
 
-You need a Cloudflare account, a GitHub account, Node.js 22 and an iPhone.
+You need a Cloudflare account, a GitHub account and an iPhone. You set everything in one place: your GitHub repository's **Settings → Secrets and variables → Actions**. Each deploy makes the Cloudflare resources and copies your settings to the Worker.
 
 ### 1. Copy the repository
 
-Fork or clone this repository. In `wrangler.jsonc`, change `account_id` to your Cloudflare account ID (Cloudflare dashboard, then **Workers & Pages**, then the right-hand column). Delete the line if you have only one account.
+Fork this repository.
 
-### 2. Make the Cloudflare resources (one time)
+### 2. Make two secrets
 
-```sh
-npm ci
-npx wrangler login
-npx wrangler r2 bucket create podchast
-npx wrangler queues create podchast-jobs
-npx wrangler r2 bucket lifecycle add podchast expire-audio audio/ --expire-days 91
-npx wrangler r2 bucket lifecycle add podchast expire-parts parts/ --expire-days 31
-```
+In your fork, open **Settings → Secrets and variables → Actions**. Add these repository secrets:
 
-### 3. Make a token
+- `CLOUDFLARE_API_KEY`: a [Cloudflare API token](https://dash.cloudflare.com/profile/api-tokens). Use the **Edit Cloudflare Workers** template. Add **Workers R2 Storage: Edit** and **Queues: Edit** if the template does not have them.
+- `TOKEN`: the password for your feed. It is also part of every private URL. Make one with `openssl rand -base64 24 | tr '+/' '-_'` and keep a copy in your password manager.
 
-The token is the password for your feed. It is also part of every private URL.
+### 3. Deploy
 
-```sh
-openssl rand -base64 24 | tr '+/' '-_'
-```
+Open the **Actions** tab, then **Deploy**, then **Run workflow**. Later, each push to `main` deploys again.
 
-Keep a copy in your password manager.
-
-### 4. Deploy
-
-**With GitHub Actions (recommended).** A push to `main` deploys the Worker. In your GitHub repository, open **Settings**, then **Secrets and variables**, then **Actions**:
-
-- Secret `CLOUDFLARE_API_KEY`: a [Cloudflare API token](https://dash.cloudflare.com/profile/api-tokens) made from the **Edit Cloudflare Workers** template.
-- Secret `TOKEN`: the token from step 3.
-- Variable `VOICE` (optional): an Edge voice name, for example `en-GB-SoniaNeural`. The default is `en-US-BrianNeural`.
-- Variable `RATE` (optional): speech speed, for example `+10%`.
-- Variable `SHORTCUT_URL` (optional): an iCloud link to your own copy of the iOS Shortcut. The default is the shared Podchast Shortcut.
-
-Then push to `main`, or run the **Deploy** workflow by hand from the **Actions** tab.
-
-**By hand.**
-
-```sh
-npx wrangler secret put TOKEN     # Paste the token from step 3.
-npx wrangler deploy
-```
+The deploy makes the R2 bucket `podchast`, the queue `podchast-jobs` and the R2 lifecycle rules, if they are missing. Then it deploys the Worker and copies your secrets to it.
 
 Your Worker is now at `https://podchast.<your-subdomain>.workers.dev`. Open `https://podchast.<your-subdomain>.workers.dev/<TOKEN>` to see the status page.
+
+### 4. Settings
+
+All settings are optional. Add them in the same place, then deploy again.
+
+| Name | Kind | Use |
+| --- | --- | --- |
+| `CLOUDFLARE_API_KEY` | Secret | Cloudflare API token (required). |
+| `TOKEN` | Secret | Feed password (required). |
+| `EMAIL_FROM` | Secret | Senders that may email Podchast, comma separated. `@example.com` allows a whole domain. See step 7. |
+| `EMAIL_TO` | Variable | The address that Podchast gets email at, for example `devour@podchast.example.com`. The status page shows it. |
+| `VOICE` | Variable | Edge voice. Default `en-US-BrianNeural`. See [TTS engine](#tts-engine). |
+| `RATE` | Variable | Speech speed, for example `+10%`. Default `+0%`. |
+| `PITCH` | Variable | Voice pitch, for example `-5%`. Default `-8%`. |
+| `SHORTCUT_URL` | Variable | iCloud link to your own copy of the iOS Shortcut. Default: the shared Podchast Shortcut. |
+| `FEED_TITLE` | Variable | Podcast name. Default `🍖 PODCHAST`. |
+| `RETENTION_DAYS` | Variable | Days to keep audio. Default `90`. The R2 lifecycle rule follows it. |
+| `TTS_ENGINE`, `EDGE_FORMAT`, `AI_MODEL`, `AI_SPEAKER` | Variable | TTS settings. See [TTS engine](#tts-engine). |
+| `CLOUDFLARE_ACCOUNT_ID` | Variable | Only if your API token can see more than one Cloudflare account. |
+
+The defaults are in `wrangler.jsonc`. A secret that you do not set in GitHub is not changed on the Worker.
 
 ### 5. Add the iOS Shortcut
 
@@ -90,12 +84,9 @@ Add `https://podchast.<your-subdomain>.workers.dev/<TOKEN>/noises.xml` as a feed
 You can email or forward things to Podchast. A short email with a link adds that link. A longer email becomes an episode, and its subject is the title. Each attached PDF becomes an episode. PDF links work too.
 
 1. In Cloudflare, go to **Email Routing** for your domain. Under **Settings → Subdomains**, add a subdomain such as `podchast.example.com`. This only adds MX records to the subdomain. Mail for the root domain is not changed.
-2. Add a routing rule: `devour@podchast.example.com` → **Send to a Worker** → `podchast`.
-3. Set the Worker secret `EMAIL_FROM` to the sender addresses that may feed Podchast, comma separated. A value that starts with `@` allows a whole domain. Mail from other senders is rejected. If `EMAIL_FROM` is not set, all mail is rejected.
-   ```sh
-   npx wrangler secret put EMAIL_FROM
-   ```
-4. Set `EMAIL_TO` in `wrangler.jsonc` to your address, so the status page shows it.
+2. Set the GitHub variable `EMAIL_TO` to an address on that subdomain, such as `devour@podchast.example.com`.
+3. Set the GitHub secret `EMAIL_FROM` to your own email address. Mail from other senders is rejected. If `EMAIL_FROM` is not set, all mail is rejected.
+4. Deploy again. The deploy adds the routing rule `EMAIL_TO` → **Send to a Worker** → `podchast`. For this, the API token also needs **Zone: Read** and **Email Routing Rules: Edit**. Without them, the deploy shows a warning, and you add the rule by hand in **Email Routing → Routing rules**.
 
 ## How it works
 
@@ -123,14 +114,14 @@ The Worker uses only Edge TTS (`TTS_ENGINE` is `edge-only`), so every episode ha
 
 "EdgeTTS" is the Edge "Read aloud" service. The Worker talks to it over a WebSocket, the same as the [edge-tts](https://github.com/rany2/edge-tts) Python package. The token code in `src/edge-drm.ts` is a port of edge-tts 7.3.1. If Edge TTS stops working, compare that file with the latest edge-tts `drm.py` and `constants.py`.
 
-To change the voice, set the GitHub variable `VOICE` (or `VOICE` in `wrangler.jsonc`), then deploy again. Some good English voices:
+To change the voice, set the GitHub variable `VOICE`, then deploy again. Some good English voices:
 
 - `en-US-BrianNeural` (default), `en-US-ChristopherNeural`, `en-US-GuyNeural`
 - `en-NZ-MitchellNeural`, `en-NZ-MollyNeural`
 - `en-GB-RyanNeural`, `en-GB-SoniaNeural`, `en-GB-LibbyNeural`, `en-GB-ThomasNeural`
 - `en-US-AndrewMultilingualNeural`, `en-US-EmmaMultilingualNeural`, `en-US-BrianMultilingualNeural`, `en-US-AvaMultilingualNeural`
 
-Set `RATE` to make speech faster or slower, for example `+10%`. Set `PITCH` to make the voice lower or higher, for example `-5%`. Set `EDGE_FORMAT` to change the MP3 quality (default `audio-24khz-96kbitrate-mono-mp3`). Set `TTS_ENGINE` to `workers-ai` to use only Workers AI.
+Set these as GitHub variables too. `RATE` makes speech faster or slower, for example `+10%`. `PITCH` makes the voice lower or higher, for example `-5%`. `EDGE_FORMAT` changes the MP3 quality (default `audio-24khz-96kbitrate-mono-mp3`). `TTS_ENGINE` set to `workers-ai` uses only Workers AI.
 
 ## URLs
 
@@ -152,6 +143,8 @@ All private URLs contain the secret `TOKEN`. Keep them private.
 ## Develop
 
 ```sh
+npm ci
+npx wrangler login
 npm run check     # Type check
 npm run dev       # Local Worker (Edge TTS and Workers AI need the network)
 ```

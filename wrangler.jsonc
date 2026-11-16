@@ -1,7 +1,6 @@
 {
 	"$schema": "node_modules/wrangler/config-schema.json",
 	"name": "podchast",
-	"account_id": "1f3adb483b780d986849fd63602ca46b",
 	"main": "src/index.ts",
 	"compatibility_date": "2025-09-01",
 	"observability": { "enabled": true },
@@ -15,6 +14,7 @@
 	},
 	"ai": { "binding": "AI" },
 	"triggers": { "crons": ["17 3 * * *"] },
+	// Defaults. A GitHub repository variable with the same name overrides each one on deploy.
 	"vars": {
 		"FEED_TITLE": "🍖 PODCHAST",
 		"RETENTION_DAYS": "90",
@@ -30,8 +30,8 @@
 		"AI_MODEL": "@cf/deepgram/aura-2-en",
 		"AI_SPEAKER": "",
 		// iCloud link to the iOS Shortcut. Shows an "Add to share sheet" button on the status page.
-		"SHORTCUT_URL": "https://www.icloud.com/shortcuts/f463e3946d2b458a937e6a63fa85b45a",
-		"EMAIL_TO": "devour@podchast.dhoulb.com"
+		"SHORTCUT_URL": "https://www.icloud.com/shortcuts/f463e3946d2b458a937e6a63fa85b45a"
+		// EMAIL_TO: the address that Email Routing sends to this Worker. Set it as a GitHub variable.
 	}
-	// Secret: TOKEN (run `npx wrangler secret put TOKEN`).
+	// Secrets TOKEN and EMAIL_FROM: set them as GitHub secrets. The deploy copies them to the Worker.
 }
