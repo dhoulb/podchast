@@ -43,7 +43,11 @@ type Item = {
 	words?: number;
 	image?: string; // Article image (og:image), used as episode art.
 	chapters?: number;
-	text?: boolean; // Made from text sent to /add, not from a web page. The text is in parts/<id>.txt.
+	text?: boolean; // Made from text sent to /add, not from a web page.
+	saved?: boolean; // A copy of the text is kept forever in read/<id>.md.
+	pdf?: boolean; // The original PDF is kept forever in read/<id>.pdf.
+	gone?: boolean; // The audio was deleted after RETENTION_DAYS. Only the text is left (🍖 MEAT).
+	aired?: string; // When the audio was last made, if it was made again. The feed uses it for the date.
 };
 
 // Text for one episode, with the headings that become chapters.
@@ -51,12 +55,16 @@ type PartText = { text: string; headings: string[] };
 
 // ---------- Storage (R2 only) ----------
 // items/<id>  JSON item, also copied into customMetadata so one list() call builds the feed.
-// audio/<id>.mp3
-
+// audio/<id>.mp3  Deleted after RETENTION_DAYS. The item stays.
 // parts/<id>.txt  Text for one part of a long article, deleted when that part is done.
+// read/<id>.md    The article text, kept forever. read/<id>.pdf is the original PDF, if there was one.
 
 const itemKey = (id: string) => `items/${id}`;
 const partKey = (id: string) => `parts/${id}.txt`;
+const readKey = (id: string) => `read/${id}.md`;
+const pdfKey = (id: string) => `read/${id}.pdf`;
+// Part 2 of an article shares the text of part 1.
+const rootId = (id: string) => id.replace(/-p\d+$/, "");
 
 // Articles longer than this are split into several episodes (about 40 minutes each).
 // Each part is its own queue job, so each part gets its own subrequest and time limits.
@@ -98,11 +106,11 @@ async function listItems(env: Env): Promise<Item[]> {
 		}
 		cursor = page.truncated ? page.cursor : undefined;
 	} while (cursor);
-	const cutoff = Date.now() - retentionMs(env);
-	return items.filter((i) => Date.parse(i.created) > cutoff).sort((a, b) => b.created.localeCompare(a.created));
+	return items.sort((a, b) => b.created.localeCompare(a.created));
 }
 
-const retentionMs = (env: Env) => (Number(env.RETENTION_DAYS) || 30) * 86400_000;
+const retentionDays = (env: Env) => Number(env.RETENTION_DAYS) || 90;
+const retentionMs = (env: Env) => retentionDays(env) * 86400_000;
 
 function newId(): string {
 	const rand = [...crypto.getRandomValues(new Uint8Array(4))].map((b) => b.toString(16).padStart(2, "0")).join("");
@@ -129,7 +137,7 @@ function findUrl(s: string): string | null {
 	}
 }
 
-type AddRequest = { token: string; target: string | null; content?: string; title?: string };
+type AddRequest = { token: string; target: string | null; content?: string; title?: string; pdf?: Uint8Array };
 
 async function readAddRequest(req: Request, url: URL): Promise<AddRequest> {
 	let token = req.headers.get("authorization")?.replace(/^Bearer\s+/i, "") || req.headers.get("x-token") || url.searchParams.get("token") || "";
@@ -168,10 +176,15 @@ const str = (v: unknown) => (typeof v === "string" ? v : "");
 async function addItem(env: Env, add: AddRequest): Promise<Item> {
 	const item: Item = { id: newId(), url: add.target ?? "", status: "queued", created: new Date().toISOString() };
 	if (add.content) {
-		// Keep the text in R2 until the job reads it. Long text is split into parts there.
+		// Keep the text forever. The job reads it from there.
 		item.text = true;
+		item.saved = true;
 		item.title = add.title;
-		await env.AUDIO.put(partKey(item.id), add.content);
+		await env.AUDIO.put(readKey(item.id), add.content, { httpMetadata: { contentType: "text/markdown; charset=utf-8" } });
+	}
+	if (add.pdf) {
+		item.pdf = true;
+		await env.AUDIO.put(pdfKey(item.id), add.pdf, { httpMetadata: { contentType: "application/pdf" } });
 	}
 	await saveItem(env, item);
 	await env.JOBS.send({ id: item.id });
@@ -211,10 +224,12 @@ function hms(sec = 0): string {
 
 function feedXml(env: Env, origin: string, items: Item[], file = FEED): string {
 	const base = `${origin}/${env.TOKEN}`;
-	const about = esc(`${growl(Number(env.RETENTION_DAYS) || 30)}\n\nFeed my 🫦 MOUTH here: ${base}`);
+	const about = esc(`${growl(retentionDays(env))}\n\nFeed my 🫦 MOUTH here: ${base}`);
 	const title = env.FEED_TITLE || "Podchast";
+	// Only audio goes in the feed. Old audio is deleted, so old items leave the feed.
+	const cutoff = Date.now() - retentionMs(env);
 	const entries = items
-		.filter((i) => i.status === "done" || i.status === "failed")
+		.filter((i) => (i.status === "done" || i.status === "failed") && !i.gone && Date.parse(i.aired ?? i.created) > cutoff)
 		.map((i) => {
 			const failed = i.status === "failed";
 			const article = i.title ?? (i.url || "Some text");
@@ -236,7 +251,7 @@ function feedXml(env: Env, origin: string, items: Item[], file = FEED): string {
 <title>${esc(name)}</title>
 <link>${esc(i.url || base)}</link>
 <guid isPermaLink="false">${esc(i.id)}</guid>
-<pubDate>${new Date(i.created).toUTCString()}</pubDate>
+<pubDate>${new Date(i.aired ?? i.created).toUTCString()}</pubDate>
 <description>${esc(plain)}</description>
 <content:encoded><![CDATA[${notes.join("\n").replaceAll("]]>", "]]&gt;")}]]></content:encoded>
 <enclosure url="${esc(audio)}" length="${i.bytes ?? 0}" type="audio/mpeg"/>
@@ -290,10 +305,12 @@ const GROWLS = [
 ];
 function growl(days: number): string {
 	const line = GROWLS[Math.floor(Math.random() * GROWLS.length)];
-	return `${line} Anything you do not listen to in ${days} days, I EAT AGAIN. FOREVER. NO TAKEBACKS. 🦷📜💥`;
+	return `${line} NOISES fade after ${days} days. The words stay in my 🕳️ ABYSS FOREVER. 🦷📜💥`;
 }
 
 const STATUS_LABEL: Record<Status, string> = { queued: "🫦 MOUTH", processing: "🦷 CHEWING", done: "💥 NOISE", failed: "🤮 YUCK" };
+// Done, but the audio is gone. Only the text is left.
+const MEAT = "🍖 MEAT";
 
 function statusPage(env: Env, origin: string, items: Item[], note = ""): string {
 	const base = `${origin}/${env.TOKEN}`;
@@ -304,10 +321,10 @@ function statusPage(env: Env, origin: string, items: Item[], note = ""): string 
 		.map((i) => {
 			const meta = [i.duration && hms(i.duration), i.words && `${i.words.toLocaleString("en-GB")} words`, i.chapters && `${i.chapters} chapters`, i.site, new Date(i.created).toLocaleDateString("en-GB", { day: "numeric", month: "short" })].filter(Boolean);
 			return `<li class="card">
-<div class="row"><span class="pill ${i.status}">${STATUS_LABEL[i.status]}</span><span class="meta">${esc(meta.join(" · "))}</span></div>
+<div class="row">${i.gone && i.status === "done" ? `<span class="pill meat">${MEAT}</span>` : `<span class="pill ${i.status}">${STATUS_LABEL[i.status]}</span>`}<span class="meta">${esc(meta.join(" · "))}</span></div>
 <h3>${esc(i.title ?? (i.url || "Some text"))}</h3>
 ${i.error ? `<p class="err">${esc(i.error)}</p>` : ""}
-<div class="row actions">${i.url ? `<a href="${esc(i.url)}">Source</a>` : ""}${i.status === "done" ? `<a href="${esc(`${base}/audio/${i.id}.mp3`)}">Play</a>` : ""}${i.status === "failed" ? `<form method="post" action="${esc(`${base}/retry/${i.id}`)}"><button class="link">Re-chomp</button></form>` : ""}
+<div class="row actions">${i.saved ? `<a href="${esc(`${base}/read/${rootId(i.id)}`)}">Read</a>` : ""}${i.status === "done" && !i.gone ? `<a href="${esc(`${base}/audio/${i.id}.mp3`)}">Play</a>` : ""}${i.url ? `<a href="${esc(i.url)}">Source</a>` : ""}${i.pdf ? `<a href="${esc(`${base}/read/${rootId(i.id)}.pdf`)}">PDF</a>` : ""}${i.status === "failed" || (i.gone && i.status === "done" && (i.part ?? 1) === 1) ? `<form method="post" action="${esc(`${base}/retry/${i.id}`)}"><button class="link">Re-chomp</button></form>` : ""}
 <form method="post" action="${esc(`${base}/delete/${i.id}`)}" onsubmit="return confirm('DELETE this one? Forever? No take-backs??')"><button class="link danger">Delete</button></form></div>
 </li>`;
 		})
@@ -351,7 +368,7 @@ ul{list-style:none;padding:0;margin:0;display:grid;gap:12px}
 .card h3{margin:6px 0;font-size:19px;line-height:1.25;color:var(--ink)}
 .meta{color:var(--wood);font-size:14px}
 .pill{font-size:13px;font-weight:700;padding:2px 10px;border-radius:999px;border:2px solid var(--ink);background:#fff}
-.pill.done{background:var(--green);color:#fff}.pill.processing{background:var(--ember);color:#fff}.pill.queued{background:var(--gold)}.pill.failed{background:var(--red);color:#fff}
+.pill.done{background:var(--green);color:#fff}.pill.processing{background:var(--ember);color:#fff}.pill.queued{background:var(--gold)}.pill.failed{background:var(--red);color:#fff}.pill.meat{background:#e07a5f;color:#fff}
 .err{margin:4px 0;color:var(--red);font-size:14px}
 .actions a,button.link{font:inherit;font-size:15px;font-weight:600;color:var(--teal-dd);background:none;border:0;padding:0;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
 .actions{gap:14px;margin-top:4px}.actions form{display:inline}
@@ -364,9 +381,9 @@ button.danger{color:var(--red)}
 .tab .panel:first-child{margin-top:0}
 .steps{display:block;padding-left:18px;list-style:disc}.steps li{margin:4px 0}ol.steps{list-style:decimal}.lead{color:#fff;font-weight:700;font-size:17px;margin:4px 4px 14px;text-shadow:0 2px 0 rgba(0,0,0,.25)}
 code.inline{display:inline;padding:1px 4px;border-style:solid}
-@media (prefers-color-scheme:dark){html{background:#04222c}:root{--parch:#2a2f3a;--parch-d:#444b59;--ink:#f3ead6;--wood:#e8cf9f;--teal-dd:#5fd8e6}body{background:radial-gradient(circle at 50% 0,#0b6f86 0,#06485a 45%,#04222c 100%) fixed}input[type=url],input[type=text],textarea,code{background:#1d222b !important;color:var(--ink)}.pill{color:#20293c}.pill.done,.pill.processing,.pill.failed{color:#fff}.btn,button.btn{border-color:#20293c;box-shadow:0 4px 0 #000}.btn.gold{color:#20293c}h1{-webkit-text-stroke-color:#20293c;text-shadow:0 4px 0 #000}.note{color:#20293c}}
+@media (prefers-color-scheme:dark){html{background:#04222c}:root{--parch:#2a2f3a;--parch-d:#444b59;--ink:#f3ead6;--wood:#e8cf9f;--teal-dd:#5fd8e6}body{background:radial-gradient(circle at 50% 0,#0b6f86 0,#06485a 45%,#04222c 100%) fixed}input[type=url],input[type=text],textarea,code{background:#1d222b !important;color:var(--ink)}.pill{color:#20293c}.pill.done,.pill.processing,.pill.failed,.pill.meat{color:#fff}.btn,button.btn{border-color:#20293c;box-shadow:0 4px 0 #000}.btn.gold{color:#20293c}h1{-webkit-text-stroke-color:#20293c;text-shadow:0 4px 0 #000}.note{color:#20293c}}
 </style></head><body><main>
-<header class="hero"><img src="/${HERO}" alt="The Mimic chest, eating a pile of articles"><div><h1>${esc(title)}</h1><p id="growl">ARTICLES IN. NOISES OUT. EVERYTHING EATEN AGAIN IN ${Number(env.RETENTION_DAYS) || 30} DAYS. OM NOM.</p></div></header>
+<header class="hero"><img src="/${HERO}" alt="The Mimic chest, eating a pile of articles"><div><h1>${esc(title)}</h1><p id="growl">ARTICLES IN. NOISES OUT. NOISES FADE IN ${retentionDays(env)} DAYS. WORDS STAY FOREVER. OM NOM.</p></div></header>
 <nav class="tabs" role="tablist"><a href="#mouth" role="tab">🫦 MOUTH</a><a href="#abyss" role="tab">🕳️ ABYSS</a><a href="#noises" role="tab">💥 NOISES</a></nav>
 <section id="mouth" class="tab">
 <p class="lead">Feed things into my 🫦 MOUTH. I store them in my 🕳️ ABYSS. Then you hear the 💥 NOISES. OM NOM.</p>
@@ -380,7 +397,7 @@ ${env.EMAIL_TO ? `<div class="panel"><h2>📧 Email</h2><ol class="steps"><li>Se
 </section>
 <section id="abyss" class="tab">
 ${note ? `<div class="panel note">${esc(note)}</div>` : ""}
-<p class="lead">Everything in my 🕳️ ABYSS. Chewed things become 💥 NOISES. I digest it all after ${Number(env.RETENTION_DAYS) || 30} days.</p>
+<p class="lead">Everything in my 🕳️ ABYSS. Chewed things become 💥 NOISES. NOISES fade after ${retentionDays(env)} days, but I keep the ${MEAT} (the words) FOREVER. Re-chomp the ${MEAT} to hear it again.</p>
 <ul>${rows || `<li class="card empty">My 🕳️ ABYSS is EMPTY. I AM SO HUNGRY. I could eat a WHOLE NEWSLETTER. Go to <a href="#mouth">🫦 MOUTH</a> and feed me before I eat the CSS. 🫥</li>`}</ul>
 </section>
 <section id="noises" class="tab">
@@ -397,6 +414,108 @@ var GROWLS=["ARTICLES IN. NOISES OUT. OM NOM.","I AM A CHEST. I AM HUNGRY. THESE
 var g=document.getElementById("growl");if(g&&Math.random()<0.75)g.textContent=GROWLS[Math.floor(Math.random()*GROWLS.length)];
 if(location.pathname.endsWith("/add"))history.replaceState(null,"",${JSON.stringify(`${base}/`).replace(/</g, "\\u003c")}+location.hash);
 if("serviceWorker" in navigator)navigator.serviceWorker.register("${esc(base)}/sw.js").catch(()=>{})</script></body></html>`;
+}
+
+// ---------- Read (the kept text) ----------
+
+/** read/<id> is a page to read. read/<id>.md is the raw text. read/<id>.pdf is the original PDF. */
+async function serveRead(env: Env, origin: string, name: string): Promise<Response> {
+	const id = name.replace(/\.(md|pdf)$/, "");
+	if (name.endsWith(".pdf")) {
+		const obj = await env.AUDIO.get(pdfKey(id));
+		if (!obj) return new Response("Not found", { status: 404 });
+		return new Response(obj.body, { headers: { "Content-Type": "application/pdf", "Content-Disposition": `inline; filename="${id}.pdf"`, "Cache-Control": "private, max-age=86400" } });
+	}
+	const [obj, item] = await Promise.all([env.AUDIO.get(readKey(id)), loadItem(env, id)]);
+	if (!obj) return new Response("Not found", { status: 404 });
+	const md = await obj.text();
+	if (name.endsWith(".md")) return new Response(md, { headers: { "Content-Type": "text/markdown; charset=utf-8" } });
+	return html(readPage(env, origin, id, item, md));
+}
+
+function readPage(env: Env, origin: string, id: string, item: Item | null, md: string): string {
+	const base = `${origin}/${env.TOKEN}`;
+	const title = (item?.title?.replace(/ \(Part \d+ of \d+\)$/, "") || md.match(/^#\s+(.+)$/m)?.[1] || "Some text").trim();
+	const meta = [item?.byline && `By ${item.byline}`, item?.site, item && new Date(item.created).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }), item?.words && `${item.words.toLocaleString("en-GB")} words`].filter(Boolean).join(" · ");
+	const links = [
+		`<a href="${esc(base)}/#abyss">← 🕳️ ABYSS</a>`,
+		item?.status === "done" && !item.gone && `<a href="${esc(`${base}/audio/${id}.mp3`)}">Play</a>`,
+		item?.url && `<a href="${esc(item.url)}">Source</a>`,
+		item?.pdf && `<a href="${esc(`${base}/read/${id}.pdf`)}">PDF</a>`,
+		`<a href="${esc(`${base}/read/${id}.md`)}">Markdown</a>`,
+	].filter(Boolean);
+	return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title><link rel="icon" href="${esc(base)}/icon-192.png">
+<style>
+:root{--bg:#fbf6ec;--ink:#20293c;--muted:#6b4226;--link:#0b5f78;--rule:#e8cf9f}
+@media (prefers-color-scheme:dark){:root{--bg:#161a21;--ink:#ece6d8;--muted:#e8cf9f;--link:#5fd8e6;--rule:#3a404c}}
+html{background:var(--bg)}body{margin:0;padding:24px 16px 64px;color:var(--ink);background:var(--bg);font:19px/1.6 Georgia,"Iowan Old Style",serif}
+main{max-width:680px;margin:0 auto}nav{display:flex;flex-wrap:wrap;gap:16px;font:600 15px system-ui,sans-serif;margin-bottom:24px}a{color:var(--link)}
+h1{font-size:34px;line-height:1.15;margin:0 0 8px}h2,h3,h4{line-height:1.25;margin:1.6em 0 .4em}.meta{color:var(--muted);font:14px system-ui,sans-serif;margin:0 0 28px;padding-bottom:16px;border-bottom:2px solid var(--rule)}
+blockquote{margin:1em 0;padding-left:16px;border-left:3px solid var(--rule)}pre{white-space:pre-wrap;font-size:14px;background:rgba(0,0,0,.05);padding:12px;border-radius:8px}li{margin:.3em 0}img{max-width:100%}
+</style></head><body><main><nav>${links.join("")}</nav><h1>${esc(title)}</h1>${meta ? `<p class="meta">${esc(meta)}</p>` : ""}
+${markdownToHtml(md.replace(/^#\s+.+\n+/, ""))}
+</main></body></html>`;
+}
+
+/** A small, safe markdown renderer for the read page. All text is escaped first. */
+function markdownToHtml(md: string): string {
+	const inline = (s: string) =>
+		esc(s)
+			.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, (_, t: string, u: string) => `<a href="${u}">${t}</a>`)
+			.replace(/`([^`]+)`/g, "<code>$1</code>")
+			.replace(/(\*\*|__)(.+?)\1/g, "<strong>$2</strong>")
+			.replace(/(^|\W)[*_]([^*_\s][^*_]*?)[*_](?=\W|$)/g, "$1<em>$2</em>")
+			.replace(/\\([\\`*_{}[\]()#+\-.!>|])/g, "$1");
+	const out: string[] = [];
+	let para: string[] = [];
+	let list: { tag: string; items: string[] } | null = null;
+	let fence: string[] | null = null;
+	const flush = () => {
+		if (para.length) out.push(para[0].startsWith("&gt;") ? `<blockquote><p>${para.map((l) => l.replace(/^(&gt;\s?)+/, "")).join(" ")}</p></blockquote>` : `<p>${para.join(" ")}</p>`);
+		para = [];
+		if (list) out.push(`<${list.tag}>${list.items.map((i) => `<li>${i}</li>`).join("")}</${list.tag}>`);
+		list = null;
+	};
+	for (const line of md.replace(/\r\n?/g, "\n").split("\n")) {
+		if (/^\s*(```|~~~)/.test(line)) {
+			if (fence) {
+				out.push(`<pre>${esc(fence.join("\n"))}</pre>`);
+				fence = null;
+			} else {
+				flush();
+				fence = [];
+			}
+			continue;
+		}
+		if (fence) {
+			fence.push(line);
+			continue;
+		}
+		if (!line.trim()) {
+			flush();
+			continue;
+		}
+		const h = line.match(/^\s{0,3}(#{1,6})\s+(.*?)\s*#*\s*$/);
+		if (h) {
+			flush();
+			const n = Math.min(4, Math.max(2, h[1].length));
+			out.push(`<h${n}>${inline(h[2])}</h${n}>`);
+			continue;
+		}
+		const li = line.match(/^\s*([-*+]|\d+[.)])\s+(.*)$/);
+		if (li) {
+			const tag = /\d/.test(li[1]) ? "ol" : "ul";
+			if (para.length || (list && list.tag !== tag)) flush();
+			list ??= { tag, items: [] };
+			list.items.push(inline(li[2]));
+			continue;
+		}
+		if (list) flush();
+		para.push(inline(line.trim()));
+	}
+	if (fence) out.push(`<pre>${esc(fence.join("\n"))}</pre>`);
+	flush();
+	return out.join("\n");
 }
 
 /** Web app manifest. On Android, installing the status page adds Podchast to the share menu. */
@@ -453,9 +572,10 @@ async function handleFetch(req: Request, env: Env): Promise<Response> {
 	if (a === "icon-192.png") return png(icon192);
 	if (a === "icon-512.png") return png(icon512);
 	if (a === "delete" && b && b !== FAILED_ID && req.method === "POST") {
-		await env.AUDIO.delete([itemKey(b), audioKey(b), partKey(b)]);
+		await env.AUDIO.delete([itemKey(b), audioKey(b), partKey(b), readKey(b), pdfKey(b)]);
 		return Response.redirect(`${url.origin}/${env.TOKEN}`, 303);
 	}
+	if (a === "read" && b) return serveRead(env, url.origin, b);
 	if (a === "add") {
 		const add = await readAddRequest(req, url);
 		// The status page form posts here from a browser. Shortcuts and scripts get a short text reply.
@@ -550,6 +670,11 @@ async function processJob(env: Env, job: Job, attempt: number): Promise<void> {
 	const item = await loadItem(env, job.id);
 	if (!item || (item.status === "done" && !job.force)) return;
 	item.status = "processing";
+	// Re-chomp of 🍖 MEAT: read the kept text again, and split it again if it is long.
+	if (item.gone && (item.part ?? 1) === 1) {
+		item.part = undefined;
+		item.parts = undefined;
+	}
 	await saveItem(env, item);
 	try {
 		const { text, headings } = item.part ? await partText(env, item) : await firstPart(env, item);
@@ -575,6 +700,10 @@ async function processJob(env: Env, job: Job, attempt: number): Promise<void> {
 		item.engine = engine;
 		item.error = edgeError ? `Edge TTS failed, used Workers AI: ${edgeError}` : undefined;
 		item.status = "done";
+		if (item.gone) {
+			item.gone = undefined;
+			item.aired = new Date().toISOString();
+		}
 		await saveItem(env, item);
 		if (item.parts || item.text) await env.AUDIO.delete(partKey(item.id));
 	} catch (e) {
@@ -590,23 +719,43 @@ async function processJob(env: Env, job: Job, attempt: number): Promise<void> {
 
 /** Fetch the article for a new item. If it is long, queue parts 2..n as their own items and return the text for part 1. */
 async function firstPart(env: Env, item: Item): Promise<PartText> {
-	const art = item.text ? await textArticle(env, item) : await fetchArticle(item.url, (bytes, url) => pdfArticle(env, bytes, url));
+	// Text we already keep is read from R2. A web page is only fetched the first time, so a re-chomp reads the copy we saved.
+	let pdf: ArrayBuffer | undefined;
+	const kept = item.text || item.saved;
+	const art = kept
+		? await textArticle(env, item)
+		: await fetchArticle(item.url, (bytes, url) => {
+				pdf = bytes;
+				return pdfArticle(env, bytes, url);
+			});
+	if (!kept) {
+		await env.AUDIO.put(readKey(item.id), articleMarkdown(art), { httpMetadata: { contentType: "text/markdown; charset=utf-8" } });
+		item.saved = true;
+	}
+	if (pdf) {
+		await env.AUDIO.put(pdfKey(item.id), pdf, { httpMetadata: { contentType: "application/pdf" } });
+		item.pdf = true;
+	}
 	item.title = art.title;
-	item.byline = art.byline;
-	item.site = art.site;
-	item.excerpt = art.excerpt ?? art.text.slice(0, 300);
-	item.image = art.image && art.image.length <= 400 ? art.image : undefined;
+	item.byline = art.byline ?? item.byline;
+	item.site = art.site ?? item.site;
+	item.excerpt = art.excerpt ?? item.excerpt ?? art.text.slice(0, 300);
+	const image = art.image ?? item.image;
+	item.image = image && image.length <= 400 ? image : undefined;
 	const headings = art.headings ?? [];
 	const n = Math.ceil(art.text.length / PART_CHARS);
 	if (n <= 1) return { text: art.text, headings };
 	// Balanced parts, split at paragraph or sentence breaks.
 	const chunks = chunkText(art.text, Math.ceil((art.text.length / n) * 1.05));
 	const parts = chunks.length;
-	const created = Date.parse(item.created);
+	// Later parts get later dates. A re-chomp starts from now, so the parts are new in the feed.
+	const created = item.gone ? Date.now() : Date.parse(item.created);
 	const partOf = (t: string): PartText => ({ text: t, headings: headings.filter((h) => t.includes(h)) });
 	for (let i = 1; i < parts; i++) {
 		// Later parts get later dates, so podcast apps list them in order.
-		const p: Item = { ...item, id: `${item.id}-p${i + 1}`, part: i + 1, parts, status: "queued", created: new Date(created + i * 1000).toISOString() };
+		const at = new Date(created + i * 1000).toISOString();
+		const p: Item = { ...item, id: `${item.id}-p${i + 1}`, part: i + 1, parts, status: "queued", created: item.gone ? ((await loadItem(env, `${item.id}-p${i + 1}`))?.created ?? at) : at, pdf: undefined };
+		if (item.gone) p.aired = at;
 		p.title = `${art.title} (Part ${i + 1} of ${parts})`;
 		await env.AUDIO.put(partKey(p.id), JSON.stringify(partOf(chunks[i])));
 		await saveItem(env, p);
@@ -639,12 +788,23 @@ async function pdfArticle(env: Env, bytes: ArrayBuffer, url: string): Promise<Ar
 
 /** Read text that was sent to /add. Markdown is made plain, and its headings become chapters. */
 async function textArticle(env: Env, item: Item): Promise<Article> {
-	const obj = await env.AUDIO.get(partKey(item.id));
+	// Older items kept their text in parts/ until the job read it.
+	const obj = (await env.AUDIO.get(readKey(item.id))) ?? (await env.AUDIO.get(partKey(item.id)));
 	if (!obj) throw new Error("The text is missing");
 	const { text, headings, h1 } = markdownToSpeech(await obj.text());
 	if (!text) throw new Error("The text was empty after I took out the markdown");
-	const title = item.title || h1 || text.split("\n")[0].slice(0, 80).replace(/\s+\S*$/, "") + (text.length > 80 ? "…" : "");
+	const title = item.title?.replace(/ \(Part \d+ of \d+\)$/, "") || h1 || text.split("\n")[0].slice(0, 80).replace(/\s+\S*$/, "") + (text.length > 80 ? "…" : "");
 	return { title, text, headings, site: item.url ? new URL(item.url).hostname.replace(/^www\./, "") : undefined };
+}
+
+/** The article as markdown, to keep in read/<id>.md. Re-chomp reads it back with markdownToSpeech. */
+function articleMarkdown(art: Article): string {
+	const headings = new Set(art.headings ?? []);
+	const body = art.text
+		.split(/\n{2,}/)
+		.map((p) => (headings.has(p) ? `## ${p.replace(/\.$/, "")}` : p.replace(/^(#|[-*+] |\d+[.)] |>)/, "\\$1")))
+		.join("\n\n");
+	return `# ${art.title}\n\n${body}\n`;
 }
 
 /** Turn markdown (or plain text) into paragraphs to read aloud. */
@@ -668,6 +828,7 @@ function markdownToSpeech(md: string): { text: string; headings: string[]; h1?: 
 			.replace(/(\*\*|__)(.+?)\1/g, "$2")
 			.replace(/(^|\W)[*_]([^*_\s][^*_]*?)[*_](?=\W|$)/g, "$1$2")
 			.replace(/~~(.+?)~~/g, "$1")
+			.replace(/\\([\\`*_{}[\]()#+\-.!>|])/g, "$1") // Markdown escapes.
 			.replace(/\s+/g, " ")
 			.trim();
 	for (const line of md.replace(/\r\n?/g, "\n").split("\n")) {
@@ -769,10 +930,11 @@ export default {
 		}
 	},
 
-	// Daily clean-up. The R2 lifecycle rule also deletes old objects; this is a backup.
+	// Daily clean-up. Old audio is deleted, and its item becomes 🍖 MEAT. Items and read/ copies stay forever.
+	// The R2 lifecycle rules also delete old audio/ and parts/ objects; this is a backup, and it marks the items.
 	async scheduled(_ctl, env) {
 		const cutoff = Date.now() - retentionMs(env);
-		for (const prefix of ["items/", "audio/", "parts/"]) {
+		for (const prefix of ["audio/", "parts/"]) {
 			let cursor: string | undefined;
 			do {
 				const page = await env.AUDIO.list({ prefix, cursor, limit: 1000 });
@@ -780,6 +942,15 @@ export default {
 				if (old.length) await env.AUDIO.delete(old);
 				cursor = page.truncated ? page.cursor : undefined;
 			} while (cursor);
+		}
+		// Mark done items whose audio is old (or already deleted by the lifecycle rule).
+		for (const item of await listItems(env)) {
+			if (item.status !== "done" || item.gone || Date.parse(item.aired ?? item.created) > cutoff) continue;
+			if (await env.AUDIO.head(audioKey(item.id))) continue;
+			const full = await loadItem(env, item.id);
+			if (!full) continue;
+			full.gone = true;
+			await saveItem(env, full);
 		}
 	},
 
@@ -797,7 +968,7 @@ export default {
 		for (const pdf of mail.pdfs) {
 			const markdown = await pdfMarkdown(env, pdf.name, pdf.bytes);
 			const title = (mail.pdfs.length === 1 && subject) || pdf.name.replace(/\.pdf$/i, "");
-			const add: AddRequest = { token: "", target: null, content: markdown.trim(), title };
+			const add: AddRequest = { token: "", target: null, content: markdown.trim(), title, pdf: pdf.bytes };
 			if (!addProblem(add)) added.push((await addItem(env, add)).id);
 		}
 		if (!mail.pdfs.length) {
