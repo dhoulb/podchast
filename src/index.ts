@@ -21,7 +21,7 @@ export interface Env extends TtsEnv {
 }
 
 // Debug jobs: "edge" and "workers-ai" speak `text` (or a test sentence) into debug/<id>.mp3. The voice, EDGE_FORMAT and EDGE_PAUSE_MS can be set for one job.
-type Job = { id: string; debug?: "edge" | "workers-ai" | "extract"; url?: string; force?: boolean; text?: string; format?: string; pause?: number; voice?: string };
+type Job = { id: string; debug?: "edge" | "workers-ai" | "extract"; url?: string; force?: boolean; text?: string; format?: string; pause?: number; voice?: string; rate?: string; pitch?: string };
 
 type Status = "queued" | "processing" | "done" | "failed";
 type Item = {
@@ -305,7 +305,7 @@ const GROWLS = [
 	"Once I was an ordinary treasure chest. Then a wizard said \"read more\". I TOOK IT LITERALLY.",
 	"NOM. NOM NOM. NOM NOM NOM. (This is a podcast. The NOMs are the theme tune.)",
 	"I have eaten newsletters, manifestos, recipes with too much backstory, and ONE terms of service. I regret NOTHING.",
-	"Every episode is fresh from my 🕳️ ABYSS. Warm. Slightly damp. Narrated by a polite New Zealander I keep in a JAR.",
+	"Every episode is fresh from my 🕳️ ABYSS. Warm. Slightly damp. Narrated by a calm man named BRIAN I keep in a JAR.",
 	"Do not put your hand in me. Put a LINK in me. Hands are crunchy and links are crunchier.",
 ];
 function growl(days: number): string {
@@ -645,12 +645,15 @@ async function debugJob(env: Env, job: Job): Promise<void> {
 	const engine = job.debug as "edge" | "workers-ai";
 	const name = /^[\w-]{1,40}$/.test(job.id) ? job.id : engine;
 	const start = Date.now();
-	const report: Record<string, unknown> = { engine, voice: job.voice, format: job.format, pause: job.pause, at: new Date().toISOString() };
+	const report: Record<string, unknown> = { engine, voice: job.voice, rate: job.rate, pitch: job.pitch, format: job.format, pause: job.pause, at: new Date().toISOString() };
 	try {
 		const tts = { ...env, TTS_ENGINE: engine === "edge" ? "edge-only" : "workers-ai" };
 		if (job.format) tts.EDGE_FORMAT = job.format;
 		if (job.pause !== undefined) tts.EDGE_PAUSE_MS = String(job.pause);
 		if (job.voice && /^[\w-]+$/.test(job.voice)) tts.VOICE = job.voice;
+		// Prosody values, such as "-5%" or "-2Hz".
+		if (job.rate && /^[+-]\d{1,2}%$/.test(job.rate)) tts.RATE = job.rate;
+		if (job.pitch && /^[+-]\d{1,2}(%|Hz)$/.test(job.pitch)) tts.PITCH = job.pitch;
 		const { mp3, engine: used } = await speak(tts, job.text || "Hello. This is a test of Podchast, running on Cloudflare.");
 		await env.AUDIO.put(`debug/${name}.mp3`, mp3, { httpMetadata: { contentType: "audio/mpeg" } });
 		// The first MP3 frame header: bytes 1 and 2 hold the bitrate and sample rate.

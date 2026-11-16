@@ -4,7 +4,7 @@ import { chunkText } from "./extract";
 const EDGE_PARALLEL = 4;
 
 export type Engine = "edge" | "workers-ai";
-export type TtsEnv = { AI: Ai; VOICE: string; RATE?: string; AI_MODEL: string; AI_SPEAKER?: string; TTS_ENGINE?: string; EDGE_FORMAT?: string; EDGE_PAUSE_MS?: string };
+export type TtsEnv = { AI: Ai; VOICE: string; RATE?: string; PITCH?: string; AI_MODEL: string; AI_SPEAKER?: string; TTS_ENGINE?: string; EDGE_FORMAT?: string; EDGE_PAUSE_MS?: string };
 
 async function retry<T>(fn: () => Promise<T>, tries = 3): Promise<T> {
 	let last: unknown;
@@ -32,7 +32,7 @@ async function edgeAll(env: TtsEnv, text: string): Promise<Spoken> {
 		while (next < chunks.length) {
 			const i = next++;
 			const t = Date.now();
-			const out = await retry(() => edgeSynthesise(chunks[i], { voice: env.VOICE, rate: env.RATE, format: env.EDGE_FORMAT, pause: Number(env.EDGE_PAUSE_MS) || 0 }, 90_000), 3);
+			const out = await retry(() => edgeSynthesise(chunks[i], { voice: env.VOICE, rate: env.RATE, pitch: env.PITCH, format: env.EDGE_FORMAT, pause: Number(env.EDGE_PAUSE_MS) || 0 }, 90_000), 3);
 			parts[i] = out.audio;
 			cues[i] = out.cues;
 			console.log(`Edge TTS part ${i + 1}/${chunks.length}: ${parts[i].length} bytes, ${cues[i].length} sentences in ${Date.now() - t} ms`);

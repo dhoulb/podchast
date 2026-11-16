@@ -19,8 +19,10 @@
 		"FEED_TITLE": "🍖 PODCHAST",
 		"RETENTION_DAYS": "90",
 		// Edge TTS voice. List: https://speech.platform.bing.com/consumer/speech/synthesize/readaloud/voices/list?trustedclienttoken=6A5AA1D4EAFF4E9FB37E23D68491D6F4
-		"VOICE": "en-NZ-MitchellNeural",
+		"VOICE": "en-US-BrianNeural",
 		"RATE": "+0%",
+		// Edge prosody pitch, such as "-5%" or "-2Hz". Lower is calmer.
+		"PITCH": "+0Hz",
 		// Edge output format. 96 kbps sounds clearer than the 48 kbps default. Edge refuses 48 kHz / 192 kbps.
 		"EDGE_FORMAT": "audio-24khz-96kbitrate-mono-mp3",
 		// "edge" (default, falls back to Workers AI) or "workers-ai".

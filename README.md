@@ -39,7 +39,7 @@ Keep a copy in your password manager.
 
 - Secret `CLOUDFLARE_API_KEY`: a [Cloudflare API token](https://dash.cloudflare.com/profile/api-tokens) made from the **Edit Cloudflare Workers** template.
 - Secret `TOKEN`: the token from step 3.
-- Variable `VOICE` (optional): an Edge voice name, for example `en-GB-SoniaNeural`. The default is `en-NZ-MitchellNeural`.
+- Variable `VOICE` (optional): an Edge voice name, for example `en-GB-SoniaNeural`. The default is `en-US-BrianNeural`.
 - Variable `RATE` (optional): speech speed, for example `+10%`.
 - Variable `SHORTCUT_URL` (optional): an iCloud link to your own copy of the iOS Shortcut. The default is the shared Podchast Shortcut.
 
@@ -125,11 +125,12 @@ The Worker tries Edge TTS first. If Edge TTS fails three times, it uses Workers 
 
 To change the voice, set the GitHub variable `VOICE` (or `VOICE` in `wrangler.jsonc`), then deploy again. Some good English voices:
 
-- `en-NZ-MitchellNeural` (default), `en-NZ-MollyNeural`
+- `en-US-BrianNeural` (default), `en-US-ChristopherNeural`, `en-US-GuyNeural`
+- `en-NZ-MitchellNeural`, `en-NZ-MollyNeural`
 - `en-GB-RyanNeural`, `en-GB-SoniaNeural`, `en-GB-LibbyNeural`, `en-GB-ThomasNeural`
 - `en-US-AndrewMultilingualNeural`, `en-US-EmmaMultilingualNeural`, `en-US-BrianMultilingualNeural`, `en-US-AvaMultilingualNeural`
 
-Set `RATE` to make speech faster or slower, for example `+10%`. Set `TTS_ENGINE` to `workers-ai` to use only Workers AI.
+Set `RATE` to make speech faster or slower, for example `+10%`. Set `PITCH` to make the voice lower or higher, for example `-5%`. Set `EDGE_FORMAT` to change the MP3 quality (default `audio-24khz-96kbitrate-mono-mp3`). Set `TTS_ENGINE` to `workers-ai` to use only Workers AI.
 
 ## URLs
 
