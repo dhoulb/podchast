@@ -28,9 +28,9 @@ Still ask Dave before you:
   - `parts/<id>.txt`: text of one part of a long article. Lifecycle rule: 31 days.
 - Email in: the Worker `email()` handler (`src/mail.ts` reads the MIME). Email Routing on the subdomain `podchast.dhoulb.com` sends `devour@` to the Worker. Only senders in the `EMAIL_FROM` secret are accepted. The address is the `EMAIL_TO` GitHub variable. PDFs (attachments and links) become text with Workers AI `toMarkdown`.
 - `/add` takes a `url`, or `content` (text or markdown) with an optional `title`. Text is kept in `read/<id>.md` (`item.text` is set).
-- Queue `podchast-jobs`: one job per episode. The consumer gets the article, does TTS and writes the MP3. Articles over 40,000 characters (`PART_CHARS`) become several episodes ("Part 1 of 3"), one job each.
+- Queue `podchast-jobs`: one job per episode. The consumer gets the article, does TTS and writes the MP3. Articles over 15,000 characters (`PART_CHARS`) become several episodes ("Part 1 of 3"), one job each.
 - Cron `17 3 * * *`: deletes old audio and marks those items `gone`.
-- TTS: Microsoft Edge "Read aloud" voices over a WebSocket (`src/edge-tts.ts`, `src/edge-drm.ts`). Edge only by default (`TTS_ENGINE=edge-only`): a failed job retries later, up to 7 attempts. Workers AI `@cf/deepgram/aura-2-en` is an optional fallback (`TTS_ENGINE=edge`, `src/tts.ts`).
+- TTS: Microsoft Edge "Read aloud" voices over a WebSocket (`src/edge-tts.ts`, `src/edge-drm.ts`). Edge only by default (`TTS_ENGINE=edge-only`): a failed job retries later, up to 5 attempts (`MAX_ATTEMPTS`, and `max_retries` 4 in `wrangler.jsonc`). Jobs run one at a time (`max_concurrency` 1), so big jobs do not hit the CPU limit together. Workers AI `@cf/deepgram/aura-2-en` is an optional fallback (`TTS_ENGINE=edge`, `src/tts.ts`).
 - Article extraction: HTMLRewriter heuristics (`src/extract.ts`).
 - Routes and queue handler: `src/index.ts`. Chapter tags: `src/id3.ts`. Cover art: `assets/cover.jpg` (1400x1400) and web app icons `assets/icon-*.png`, bundled as bytes. The feed links to the public `/cover-v5.jpg`. Change `COVER` in `src/index.ts` when the art changes, so podcast apps fetch it again.
 
