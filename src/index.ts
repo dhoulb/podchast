@@ -20,7 +20,8 @@ export interface Env extends TtsEnv {
 	EMAIL_FROM?: string; // Secret. Sender addresses (or @domains) allowed to email Podchast, comma separated.
 }
 
-type Job = { id: string; debug?: "edge" | "workers-ai" | "extract"; url?: string; force?: boolean };
+// Debug jobs: "edge" and "workers-ai" speak `text` (or a test sentence) into debug/<id>.mp3. EDGE_FORMAT and EDGE_PAUSE_MS can be set for one job.
+type Job = { id: string; debug?: "edge" | "workers-ai" | "extract"; url?: string; force?: boolean; text?: string; format?: string; pause?: number };
 
 type Status = "queued" | "processing" | "done" | "failed";
 type Item = {
@@ -576,6 +577,11 @@ async function handleFetch(req: Request, env: Env): Promise<Response> {
 		return Response.redirect(`${url.origin}/${env.TOKEN}`, 303);
 	}
 	if (a === "read" && b) return serveRead(env, url.origin, b);
+	// Test clips from debug jobs, so they can be heard on a phone.
+	if (a === "debug" && b && /^[\w-]+\.mp3$/.test(b)) {
+		const obj = await env.AUDIO.get(`debug/${b}`);
+		return obj ? new Response(obj.body, { headers: { "Content-Type": "audio/mpeg", "Content-Length": String(obj.size) } }) : new Response("Not found", { status: 404 });
+	}
 	if (a === "add") {
 		const add = await readAddRequest(req, url);
 		// The status page form posts here from a browser. Shortcuts and scripts get a short text reply.
@@ -626,18 +632,25 @@ const html = (body: string) => new Response(body, { headers: { "Content-Type": "
 const MAX_ATTEMPTS = 3;
 
 /** Debug job: speak one sentence with one engine and save the result under debug/. */
-async function debugJob(env: Env, engine: "edge" | "workers-ai"): Promise<void> {
+async function debugJob(env: Env, job: Job): Promise<void> {
+	const engine = job.debug as "edge" | "workers-ai";
+	const name = /^[\w-]{1,40}$/.test(job.id) ? job.id : engine;
 	const start = Date.now();
-	const report: Record<string, unknown> = { engine, at: new Date().toISOString() };
+	const report: Record<string, unknown> = { engine, format: job.format, pause: job.pause, at: new Date().toISOString() };
 	try {
-		const { mp3, engine: used } = await speak({ ...env, TTS_ENGINE: engine === "edge" ? "edge-only" : "workers-ai" }, "Hello. This is a test of Podchast, running on Cloudflare.");
-		await env.AUDIO.put(`debug/${engine}.mp3`, mp3, { httpMetadata: { contentType: "audio/mpeg" } });
-		Object.assign(report, { ok: true, used, bytes: mp3.length, duration: mp3Duration(mp3) });
+		const tts = { ...env, TTS_ENGINE: engine === "edge" ? "edge-only" : "workers-ai" };
+		if (job.format) tts.EDGE_FORMAT = job.format;
+		if (job.pause !== undefined) tts.EDGE_PAUSE_MS = String(job.pause);
+		const { mp3, engine: used } = await speak(tts, job.text || "Hello. This is a test of Podchast, running on Cloudflare.");
+		await env.AUDIO.put(`debug/${name}.mp3`, mp3, { httpMetadata: { contentType: "audio/mpeg" } });
+		// The first MP3 frame header: bytes 1 and 2 hold the bitrate and sample rate.
+		const at = mp3.findIndex((b, i) => b === 0xff && (mp3[i + 1] & 0xe0) === 0xe0);
+		Object.assign(report, { ok: true, used, bytes: mp3.length, duration: mp3Duration(mp3), frame: at >= 0 ? [...mp3.subarray(at, at + 4)].map((b) => b.toString(16).padStart(2, "0")).join(" ") : undefined });
 	} catch (e) {
 		Object.assign(report, { ok: false, error: String((e as Error)?.stack ?? e) });
 	}
 	report.ms = Date.now() - start;
-	await env.AUDIO.put(`debug/${engine}.json`, JSON.stringify(report, null, 1));
+	await env.AUDIO.put(`debug/${name}.json`, JSON.stringify(report, null, 1));
 }
 
 /** Debug job: extract one URL (or the first item of an RSS feed) and save the text under debug/. */
@@ -668,7 +681,7 @@ async function debugExtract(env: Env, id: string, url: string): Promise<void> {
 
 async function processJob(env: Env, job: Job, attempt: number): Promise<void> {
 	if (job.debug === "extract") return debugExtract(env, job.id, job.url ?? "");
-	if (job.debug) return debugJob(env, job.debug);
+	if (job.debug) return debugJob(env, job);
 	const item = await loadItem(env, job.id);
 	if (!item || (item.status === "done" && !job.force)) return;
 	item.status = "processing";
