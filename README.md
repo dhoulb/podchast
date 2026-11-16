@@ -4,30 +4,40 @@ Podchast turns web articles into a private podcast. Share a link from your iPhon
 
 Everything runs on Cloudflare: Workers, Queues and R2. The Workers Free plan is enough.
 
-## Set up your own
+## Set up your own PODCHAST
 
-You need a Cloudflare account, a GitHub account and an iPhone. You set everything in one place: your GitHub repository's **Settings → Secrets and variables → Actions**. Each deploy makes the Cloudflare resources and copies your settings to the Worker.
+You need a Cloudflare account, a GitHub account and a phone.
 
-### 1. Copy the repository
+1. **Fork** this repository.
+2. **Add two secrets.** In your fork, open **Settings → Secrets and variables → Actions → Secrets**:
+   - `CLOUDFLARE_API_KEY`: a [Cloudflare API token](https://dash.cloudflare.com/profile/api-tokens) from the **Edit Cloudflare Workers** template, with **Workers R2 Storage: Edit** and **Queues: Edit**.
+   - `TOKEN`: a password for your feed. Make one with `openssl rand -base64 24 | tr '+/' '-_'`.
+3. **Deploy.** Open **Actions → Deploy → Run workflow**. The deploy makes everything in Cloudflare for you.
+4. **Open your status page** on your phone: `https://podchast.<your-subdomain>.workers.dev/<TOKEN>`. Tap **Add 🍖 DEVOUR shortcut**, and add the 💥 NOISES feed to your podcast app. Help: [iOS Shortcut](#ios-shortcut), [Podcast apps](#podcast-apps).
 
-Fork this repository.
+Now share any article to Podchast. The episode is ready in a few minutes.
 
-### 2. Settings
+## Features and docs
 
-In your fork, open **Settings → Secrets and variables → Actions**. Add your settings there. A variable that you put on the Secrets tab still works. Secrets must be on the Secrets tab: the deploy does not read `TOKEN`, `CLOUDFLARE_API_KEY` or `EMAIL_FROM` from variables, because variables show in the deploy log, and the log of a public repository is public.
+- [Settings](#settings)
+- [iOS Shortcut](#ios-shortcut)
+- [Podcast apps](#podcast-apps)
+- [Email in](#email-in)
+- [How it works](#how-it-works)
+- [TTS engine](#tts-engine)
+- [URLs](#urls)
+- [Develop](#develop)
+- [Limits](#limits)
 
-**Required.** Add these two repository secrets:
+### Settings
+
+All settings live in GitHub: **Settings → Secrets and variables → Actions**. Each deploy copies them to the Worker. When you change a setting, deploy again.
+
+`CLOUDFLARE_API_KEY` and `TOKEN` are required (see setup). Everything else is optional. The defaults are in `wrangler.jsonc`.
 
 | Name | Kind | Use |
 | --- | --- | --- |
-| `CLOUDFLARE_API_KEY` | Secret | A [Cloudflare API token](https://dash.cloudflare.com/profile/api-tokens). Use the **Edit Cloudflare Workers** template. Add **Workers R2 Storage: Edit** and **Queues: Edit** if the template does not have them. |
-| `TOKEN` | Secret | The password for your feed. It is also part of every private URL. Make one with `openssl rand -base64 24 \| tr '+/' '-_'` and keep a copy in your password manager. |
-
-**Optional.** Add these only if you want to change the default. The defaults are in `wrangler.jsonc`.
-
-| Name | Kind | Use |
-| --- | --- | --- |
-| `EMAIL_TO` | Variable | The address that Podchast gets email at, for example `devour@podchast.example.com`. The status page shows it. If it is not set, the deploy does not set up email. See step 6. |
+| `EMAIL_TO` | Variable | The address that Podchast gets email at, for example `devour@podchast.example.com`. The status page shows it. If it is not set, the deploy does not set up email. See [Email in](#email-in). |
 | `EMAIL_FROM` | Secret | Senders that may email Podchast. Separate them with commas, spaces or new lines, in any mix. `@example.com` allows a whole domain. |
 | `VOICE` | Variable | Edge voice. Default `en-US-BrianNeural`. See [TTS engine](#tts-engine). |
 | `RATE` | Variable | Speech speed, for example `+10%`. Default `+0%`. |
@@ -38,17 +48,11 @@ In your fork, open **Settings → Secrets and variables → Actions**. Add your 
 | `TTS_ENGINE`, `EDGE_FORMAT`, `AI_MODEL`, `AI_SPEAKER` | Variable | TTS settings. See [TTS engine](#tts-engine). |
 | `CLOUDFLARE_ACCOUNT_ID` | Variable | Not needed in most cases: the deploy gets the account from the API token. Set it only if the token can see more than one Cloudflare account. |
 
-When you change a setting, deploy again. A secret that you do not set in GitHub is not changed on the Worker.
+A variable that you put on the Secrets tab still works. Secrets must be on the Secrets tab: the deploy does not read `TOKEN`, `CLOUDFLARE_API_KEY` or `EMAIL_FROM` from variables, because variables show in the deploy log, and the log of a public repository is public. A secret that you do not set in GitHub is not changed on the Worker.
 
-### 3. Deploy
+The deploy makes the R2 bucket `podchast`, the queue `podchast-jobs` and the R2 lifecycle rules, if they are missing. Later, each push to `main` deploys again.
 
-Open the **Actions** tab, then **Deploy**, then **Run workflow**. Later, each push to `main` deploys again.
-
-The deploy makes the R2 bucket `podchast`, the queue `podchast-jobs` and the R2 lifecycle rules, if they are missing. Then it deploys the Worker and copies your settings to it.
-
-Your Worker is now at `https://podchast.<your-subdomain>.workers.dev`. Open `https://podchast.<your-subdomain>.workers.dev/<TOKEN>` to see the status page.
-
-### 4. Add the iOS Shortcut
+### iOS Shortcut
 
 **Quick way:** open your status page on your iPhone. Tap **Copy MOUTH URL** on the 🫦 MOUTH tab, then **Add 🍖 DEVOUR shortcut**. Paste the URL when Shortcuts asks for it. (The button opens [this shared Shortcut](https://www.icloud.com/shortcuts/f463e3946d2b458a937e6a63fa85b45a).)
 
@@ -71,7 +75,7 @@ To share your own Shortcut: in the Shortcut, tap **i**, then **Setup**, and add 
 
 **Mac:** Shortcuts sync through iCloud. The Podchast Shortcut shows in the **Share** menu in Safari on your Mac too.
 
-### 5. Add the feed to your podcast app
+### Podcast apps
 
 Add `https://podchast.<your-subdomain>.workers.dev/<TOKEN>/noises.xml` as a feed by URL.
 
@@ -79,16 +83,16 @@ Add `https://podchast.<your-subdomain>.workers.dev/<TOKEN>/noises.xml` as a feed
 - **Overcast**: **+**, then **Add URL**.
 - **Pocket Casts**: Search, then paste the URL.
 
-### 6. Email in (optional)
+### Email in
 
-You can email or forward things to Podchast. A short email with a link adds that link. A longer email becomes an episode, and its subject is the title. Each attached PDF becomes an episode. PDF links work too.
+Optional. You can email or forward things to Podchast. A short email with a link adds that link. A longer email becomes an episode, and its subject is the title. Each attached PDF becomes an episode. PDF links work too.
 
 1. In Cloudflare, go to **Email Routing** for your domain. Under **Settings → Subdomains**, add a subdomain such as `podchast.example.com`. This only adds MX records to the subdomain. Mail for the root domain is not changed.
 2. Set the GitHub variable `EMAIL_TO` to an address on that subdomain, such as `devour@podchast.example.com`.
-3. Set the GitHub secret `EMAIL_FROM` to your own email address. Mail from other senders is rejected. If `EMAIL_FROM` is not set, all mail is rejected.
+3. Set the GitHub secret `EMAIL_FROM` to your own email address (or several, separated by commas, spaces or new lines). Mail from other senders is rejected. If `EMAIL_FROM` is not set, all mail is rejected.
 4. Deploy again. The deploy adds the routing rule `EMAIL_TO` → **Send to a Worker** → `podchast`. For this, the API token also needs **Zone: Read** and **Email Routing Rules: Edit**. Without them, the deploy shows a warning, and you add the rule by hand in **Email Routing → Routing rules**.
 
-## How it works
+### How it works
 
 1. An iOS Shortcut sends the link to `POST /<TOKEN>/add`.
 2. The Worker saves an item in R2 and puts a job on the queue.
@@ -103,7 +107,7 @@ You can email or forward things to Podchast. A short email with a link adds that
 8. The consumer keeps the article text in `read/<id>.md`, and the original PDF in `read/<id>.pdf`. These files stay forever. `GET /<TOKEN>/read/<id>` shows the text as a page.
 9. A daily cron deletes audio after 90 days. An R2 lifecycle rule (91 days) is the backup. The item stays on the status page as "🍖 MEAT", with a **Read** button. **Re-chomp** makes the audio again from the kept text.
 
-## TTS engine
+### TTS engine
 
 | Engine | Quality | Cost | Risk |
 | --- | --- | --- | --- |
@@ -123,7 +127,7 @@ To change the voice, set the GitHub variable `VOICE`, then deploy again. Some go
 
 Set these as GitHub variables too. `RATE` makes speech faster or slower, for example `+10%`. `PITCH` makes the voice lower or higher, for example `-5%`. `EDGE_FORMAT` changes the MP3 quality (default `audio-24khz-96kbitrate-mono-mp3`). `TTS_ENGINE` set to `workers-ai` uses only Workers AI.
 
-## URLs
+### URLs
 
 All private URLs contain the secret `TOKEN`. Keep them private.
 
@@ -140,7 +144,7 @@ All private URLs contain the secret `TOKEN`. Keep them private.
 | `POST /<TOKEN>/delete/<id>` | Delete an episode (the status page has a button). |
 | `GET /<TOKEN>/manifest.webmanifest` | Web app manifest. Makes the status page a Home Screen app, and an Android share target. |
 
-## Develop
+### Develop
 
 ```sh
 npm ci
@@ -156,7 +160,7 @@ cd test && npx wrangler dev --local --port 8799
 curl -X POST --data-binary @fixture.html http://127.0.0.1:8799/
 ```
 
-## Limits
+### Limits
 
 - The extractor is a simple heuristic. Most news sites and blogs work. Pages that need JavaScript or a login do not work.
 - On the Workers Free plan, one job can make 50 outbound requests. Each chunk is its own job, so there is no length limit.
