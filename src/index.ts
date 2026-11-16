@@ -822,15 +822,15 @@ async function processJob(env: Env, job: Job, attempt: number): Promise<void> {
 		const script = `${intro}\n\n${text}\n\n${outro}`;
 		item.chars = script.length;
 		item.words = text.split(/\s+/).filter(Boolean).length;
-		const { mp3, engine, edgeError, marks, vtt } = await speak(env, script);
-		const seconds = mp3Duration(mp3);
+		const { pieces, seconds: exact, engine, edgeError, marks, vtt } = await speak(env, script);
+		const seconds = Math.round(exact);
 		// Chapters: the article start, then one for each heading.
 		const chapters: Chapter[] = [{ title: item.title ?? "Start", start: 0 }];
 		for (const h of headings) {
 			const start = marks(h);
 			if (start !== undefined && start > chapters[chapters.length - 1].start + 1) chapters.push({ title: h.replace(/\.$/, ""), start });
 		}
-		const audio = concat([id3Tag(item.title ?? "Podchast", chapters, seconds), mp3]);
+		const audio = concat([id3Tag(item.title ?? "Podchast", chapters, seconds), ...pieces]);
 		await env.AUDIO.put(audioKey(item.id), audio, { httpMetadata: { contentType: "audio/mpeg" } });
 		await env.AUDIO.put(transcriptKey(item.id), vtt, { httpMetadata: { contentType: "text/vtt; charset=utf-8" } });
 		item.transcript = true;

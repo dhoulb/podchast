@@ -1,4 +1,10 @@
 import { type Cue, concat, edgeSynthesise } from "./edge-tts";
+
+// Audio is kept as a list of pieces (one for each WebSocket message) and joined only once, when it is saved.
+// Joining 10-20 MB several times used a lot of the Free plan's CPU time.
+type Pieces = Uint8Array[];
+const byteLength = (p: Pieces) => p.reduce((n, a) => n + a.length, 0);
+const piecesSeconds = (p: Pieces) => (p.length ? mp3Seconds(p[0], byteLength(p)) : 0);
 import { chunkText } from "./extract";
 
 const EDGE_PARALLEL = 4;
@@ -29,12 +35,12 @@ export function isPermanent(e: unknown): boolean {
 }
 
 /** Audio for each text chunk, in order. Chunk timings let the caller place chapter marks. cues[i] are the sentence times in chunk i, if the engine gives them. */
-export type Spoken = { chunks: string[]; audio: Uint8Array[]; cues?: Cue[][] };
+export type Spoken = { chunks: string[]; audio: Pieces[]; cues?: Cue[][] };
 
 async function edgeAll(env: TtsEnv, text: string): Promise<Spoken> {
 	// Edge speaks at about 2 to 3 times real time per connection, so run a few parts at once.
 	const chunks = chunkText(text, 3000);
-	const parts: Uint8Array[] = new Array(chunks.length);
+	const parts: Pieces[] = new Array(chunks.length);
 	const cues: Cue[][] = new Array(chunks.length);
 	let next = 0;
 	const worker = async () => {
@@ -44,7 +50,7 @@ async function edgeAll(env: TtsEnv, text: string): Promise<Spoken> {
 			const out = await retry(() => edgeSynthesise(chunks[i], { voice: env.VOICE, rate: env.RATE, pitch: env.PITCH, format: env.EDGE_FORMAT, pause: Number(env.EDGE_PAUSE_MS) || 0 }), 3);
 			parts[i] = out.audio;
 			cues[i] = out.cues;
-			console.log(`Edge TTS part ${i + 1}/${chunks.length}: ${parts[i].length} bytes, ${cues[i].length} sentences in ${Date.now() - t} ms`);
+			console.log(`Edge TTS part ${i + 1}/${chunks.length}: ${byteLength(parts[i])} bytes, ${cues[i].length} sentences in ${Date.now() - t} ms`);
 		}
 	};
 	await Promise.all(Array.from({ length: Math.min(EDGE_PARALLEL, chunks.length) }, worker));
@@ -52,7 +58,7 @@ async function edgeAll(env: TtsEnv, text: string): Promise<Spoken> {
 }
 
 async function aiAll(env: TtsEnv, text: string): Promise<Spoken> {
-	const parts: Uint8Array[] = [];
+	const parts: Pieces[] = [];
 	const chunks = chunkText(text, 1800);
 	for (const chunk of chunks) {
 		parts.push(
@@ -61,19 +67,33 @@ async function aiAll(env: TtsEnv, text: string): Promise<Spoken> {
 				if (env.AI_SPEAKER) input.speaker = env.AI_SPEAKER;
 				const resp = (await env.AI.run(env.AI_MODEL as any, input as any, { returnRawResponse: true } as any)) as unknown as Response;
 				if (!resp.ok) throw new Error(`Workers AI TTS: HTTP ${resp.status} ${(await resp.text()).slice(0, 200)}`);
-				return new Uint8Array(await resp.arrayBuffer());
+				return [new Uint8Array(await resp.arrayBuffer())];
 			}),
 		);
 	}
 	return { chunks, audio: parts };
 }
 
-/** vtt is a WebVTT transcript with one cue for each sentence. */
-export type Speech = { mp3: Uint8Array; engine: Engine; edgeError?: string; marks: (needle: string) => number | undefined; vtt: string };
+/** pieces: the MP3 in order, to join once. vtt is a WebVTT transcript with one cue for each sentence. */
+export type Speech = { pieces: Uint8Array[]; seconds: number; mp3: Uint8Array; engine: Engine; edgeError?: string; marks: (needle: string) => number | undefined; vtt: string };
 
 /** Speak the text. Uses Edge TTS first, then Workers AI if Edge fails. */
 export async function speak(env: TtsEnv, text: string): Promise<Speech> {
-	const done = (s: Spoken, engine: Engine, edgeError?: string): Speech => ({ mp3: concat(s.audio), engine, edgeError, marks: timeFinder(s), vtt: webVtt(s) });
+	const done = (s: Spoken, engine: Engine, edgeError?: string): Speech => {
+		const pieces = s.audio.flat();
+		return {
+			pieces,
+			seconds: s.audio.reduce((t, p) => t + piecesSeconds(p), 0),
+			// Joined only if a caller asks for it.
+			get mp3() {
+				return concat(pieces);
+			},
+			engine,
+			edgeError,
+			marks: timeFinder(s),
+			vtt: webVtt(s),
+		};
+	};
 	if (env.TTS_ENGINE !== "workers-ai") {
 		try {
 			return done(await edgeAll(env, text), "edge");
@@ -97,7 +117,7 @@ function timeFinder({ chunks, audio }: Spoken): (needle: string) => number | und
 	let t = 0;
 	for (const a of audio) {
 		starts.push(t);
-		t += mp3Seconds(a);
+		t += piecesSeconds(a);
 	}
 	let ci = 0;
 	let from = 0;
@@ -107,7 +127,7 @@ function timeFinder({ chunks, audio }: Spoken): (needle: string) => number | und
 			if (pos < 0) continue;
 			ci = i;
 			from = pos + needle.length;
-			return starts[i] + (pos / chunks[i].length) * mp3Seconds(audio[i]);
+			return starts[i] + (pos / chunks[i].length) * piecesSeconds(audio[i]);
 		}
 		return undefined;
 	};
@@ -123,7 +143,7 @@ export function webVtt({ chunks, audio, cues }: Spoken): string {
 	const out: Cue[] = [];
 	let t = 0;
 	audio.forEach((a, i) => {
-		const len = mp3Seconds(a);
+		const len = piecesSeconds(a);
 		const own = cues?.[i]?.length ? cues[i] : estimateCues(chunks[i], len);
 		for (const c of own) {
 			const start = Math.max(t + Math.min(c.start, len), out.at(-1)?.end ?? 0);
@@ -156,8 +176,8 @@ function estimateCues(text: string, seconds: number): Cue[] {
 /** MP3 duration in whole seconds. */
 export const mp3Duration = (mp3: Uint8Array): number => Math.round(mp3Seconds(mp3));
 
-/** Estimate MP3 duration in seconds from the first frame's bitrate (CBR). */
-export function mp3Seconds(mp3: Uint8Array): number {
+/** Estimate MP3 duration in seconds from the first frame's bitrate (CBR). total: the full length, if mp3 is only the first piece. */
+export function mp3Seconds(mp3: Uint8Array, total = mp3.length): number {
 	let i = 0;
 	if (mp3[0] === 0x49 && mp3[1] === 0x44 && mp3[2] === 0x33) {
 		i = 10 + ((mp3[6] & 0x7f) << 21) + ((mp3[7] & 0x7f) << 14) + ((mp3[8] & 0x7f) << 7) + (mp3[9] & 0x7f);
@@ -172,7 +192,7 @@ export function mp3Seconds(mp3: Uint8Array): number {
 		const v1 = [0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320];
 		const v2 = [0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160];
 		const kbps = (version === 3 ? v1 : v2)[idx];
-		return ((mp3.length - i) * 8) / (kbps * 1000);
+		return ((total - i) * 8) / (kbps * 1000);
 	}
-	return (mp3.length * 8) / 48000;
+	return (total * 8) / 48000;
 }

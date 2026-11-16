@@ -41,7 +41,7 @@ export type Cue = { start: number; end: number; text: string };
  * slowly for minutes, so a stall, not total time, is the sign of a dead socket.
  * maxMs: hard limit for the whole part.
  */
-export async function edgeSynthesise(text: string, opts: EdgeOptions, idleMs = 30_000, maxMs = 300_000): Promise<{ audio: Uint8Array; cues: Cue[] }> {
+export async function edgeSynthesise(text: string, opts: EdgeOptions, idleMs = 30_000, maxMs = 300_000): Promise<{ audio: Uint8Array[]; cues: Cue[] }> {
 	const url =
 		`${WSS_URL}&ConnectionId=${uuid()}` +
 		`&Sec-MS-GEC=${generateSecMsGec()}&Sec-MS-GEC-Version=${SEC_MS_GEC_VERSION}`;
@@ -72,21 +72,22 @@ export async function edgeSynthesise(text: string, opts: EdgeOptions, idleMs = 3
 	const done = new Promise<void>((resolve, reject) => {
 		const fail = (why: string) => () => finish(new Error(`Edge TTS: ${why} (text messages: ${seen.length}, audio parts: ${parts.length})`));
 		const hardTimer = setTimeout(fail(`timeout after ${maxMs / 1000} s`), maxMs);
-		let idleTimer = setTimeout(fail(`no data for ${idleMs / 1000} s`), idleMs);
+		// One timer that checks for a stall, not a new timer for each message (Edge sends thousands).
+		let last = Date.now();
+		const idleTimer = setInterval(() => Date.now() - last > idleMs && fail(`no data for ${idleMs / 1000} s`)(), 5_000);
 		let finished = false;
 		const finish = (err?: Error) => {
 			if (finished) return;
 			finished = true;
 			clearTimeout(hardTimer);
-			clearTimeout(idleTimer);
+			clearInterval(idleTimer);
 			try {
 				ws.close(1000);
 			} catch {}
 			err ? reject(err) : resolve();
 		};
 		ws.addEventListener("message", (ev) => {
-			clearTimeout(idleTimer);
-			idleTimer = setTimeout(fail(`no data for ${idleMs / 1000} s`), idleMs);
+			last = Date.now();
 			const data = ev.data;
 			if (typeof data === "string") {
 				seen.push(/Path:([\w.]+)/.exec(data)?.[1] ?? "?");
@@ -99,8 +100,9 @@ export async function edgeSynthesise(text: string, opts: EdgeOptions, idleMs = 3
 			const headerLen = (buf[0] << 8) | buf[1];
 			const header = decoder.decode(buf.subarray(2, 2 + headerLen));
 			if (!header.includes("Path:audio")) return;
+			// Each message has its own buffer, so keep a view of it. No copy.
 			const audio = buf.subarray(2 + headerLen);
-			if (audio.length && header.includes("Content-Type:audio/mpeg")) parts.push(audio.slice());
+			if (audio.length && header.includes("Content-Type:audio/mpeg")) parts.push(audio);
 		});
 		// A close before "turn.end" means the audio is incomplete.
 		ws.addEventListener("close", (ev) => finish(new Error(`Edge TTS: closed early ${ev.code} ${ev.reason} (audio parts: ${parts.length})`)));
@@ -121,7 +123,7 @@ export async function edgeSynthesise(text: string, opts: EdgeOptions, idleMs = 3
 
 	await done;
 	if (!parts.length) throw new Error("Edge TTS: no audio received");
-	return { audio: concat(parts), cues };
+	return { audio: parts, cues };
 }
 
 /** Sentence times from an "audio.metadata" message. Offset and Duration are in 100 ns ticks. */
