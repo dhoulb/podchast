@@ -1,0 +1,28 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "podchast",
+	"account_id": "1f3adb483b780d986849fd63602ca46b",
+	"main": "src/index.ts",
+	"compatibility_date": "2025-09-01",
+	"observability": { "enabled": true },
+	"workers_dev": true,
+	"r2_buckets": [{ "binding": "AUDIO", "bucket_name": "podchast" }],
+	"queues": {
+		"producers": [{ "binding": "JOBS", "queue": "podchast-jobs" }],
+		"consumers": [{ "queue": "podchast-jobs", "max_batch_size": 1, "max_batch_timeout": 1, "max_retries": 3, "max_concurrency": 3, "retry_delay": 60 }]
+	},
+	"ai": { "binding": "AI" },
+	"triggers": { "crons": ["17 3 * * *"] },
+	"vars": {
+		"FEED_TITLE": "Podchast",
+		"RETENTION_DAYS": "30",
+		// Edge TTS voice. List: https://speech.platform.bing.com/consumer/speech/synthesize/readaloud/voices/list?trustedclienttoken=6A5AA1D4EAFF4E9FB37E23D68491D6F4
+		"VOICE": "en-GB-RyanNeural",
+		"RATE": "+0%",
+		// "edge" (default, falls back to Workers AI) or "workers-ai".
+		"TTS_ENGINE": "edge",
+		"AI_MODEL": "@cf/deepgram/aura-2-en",
+		"AI_SPEAKER": ""
+	}
+	// Secret: TOKEN (run `npx wrangler secret put TOKEN`).
+}
