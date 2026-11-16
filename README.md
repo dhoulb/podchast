@@ -105,6 +105,7 @@ You can email or forward things to Podchast. A short email with a link adds that
 4. The consumer cuts the text into parts and sends each part to the TTS engine.
 5. The consumer joins the MP3 parts and writes one file to R2.
    Article headings become chapters (ID3 `CHAP` frames in the MP3).
+   Each episode has a timed transcript (WebVTT, one line for each sentence). The feed links it with `<podcast:transcript>`, so Pocket Casts can show the words as they are spoken.
    Articles longer than 40,000 characters (about 40 minutes) become several episodes: "Part 1 of 3", "Part 2 of 3" and so on. Each part is its own queue job.
 6. `GET /<TOKEN>/noises.xml` shows the finished items as a podcast feed.
 7. If an article fails three times, the feed gets a short "🤮 SPAT OUT: …" episode. Its notes give the reason.

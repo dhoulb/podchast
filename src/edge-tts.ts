@@ -21,13 +21,22 @@ export function escapeXml(s: string): string {
 	return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
+// Edge sends the sentence text back as it was in the SSML, escaped.
+const unescapeXml = (s: string) => s.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, "&");
+
 // format: an Edge output format, e.g. "audio-24khz-48kbitrate-mono-mp3".
 // pause: milliseconds of silence between paragraphs (blank lines). 0 means none.
 export type EdgeOptions = { voice: string; rate?: string; pitch?: string; volume?: string; format?: string; pause?: number };
 export const EDGE_DEFAULT_FORMAT = "audio-24khz-48kbitrate-mono-mp3";
 
-/** Synthesise one chunk of plain text (≤ ~4000 bytes after escaping). Returns MP3 bytes (by default 24kHz 48kbps mono). */
-export async function edgeSynthesise(text: string, opts: EdgeOptions, timeoutMs = 60_000): Promise<Uint8Array> {
+/** One spoken sentence. Times are in seconds from the start of the audio. */
+export type Cue = { start: number; end: number; text: string };
+
+/**
+ * Synthesise one chunk of plain text (≤ ~4000 bytes after escaping).
+ * Returns MP3 bytes (by default 24kHz 48kbps mono), and the time of each sentence.
+ */
+export async function edgeSynthesise(text: string, opts: EdgeOptions, timeoutMs = 60_000): Promise<{ audio: Uint8Array; cues: Cue[] }> {
 	const url =
 		`${WSS_URL}&ConnectionId=${uuid()}` +
 		`&Sec-MS-GEC=${generateSecMsGec()}&Sec-MS-GEC-Version=${SEC_MS_GEC_VERSION}`;
@@ -53,6 +62,7 @@ export async function edgeSynthesise(text: string, opts: EdgeOptions, timeoutMs 
 	ws.accept();
 
 	const parts: Uint8Array[] = [];
+	const cues: Cue[] = [];
 	const seen: string[] = []; // Paths of text messages, for error reports.
 	const done = new Promise<void>((resolve, reject) => {
 		const timer = setTimeout(() => finish(new Error(`Edge TTS: timeout (messages: ${seen.join(",") || "none"}, audio parts: ${parts.length})`)), timeoutMs);
@@ -71,6 +81,7 @@ export async function edgeSynthesise(text: string, opts: EdgeOptions, timeoutMs 
 			if (typeof data === "string") {
 				seen.push(/Path:([\w.]+)/.exec(data)?.[1] ?? "?");
 				if (data.includes("Path:turn.end")) finish();
+				else if (data.includes("Path:audio.metadata")) cues.push(...readCues(data));
 				return;
 			}
 			const buf = new Uint8Array(data as ArrayBuffer);
@@ -88,7 +99,7 @@ export async function edgeSynthesise(text: string, opts: EdgeOptions, timeoutMs 
 
 	ws.send(
 		`X-Timestamp:${dateString()}\r\nContent-Type:application/json; charset=utf-8\r\nPath:speech.config\r\n\r\n` +
-			`{"context":{"synthesis":{"audio":{"metadataoptions":{"sentenceBoundaryEnabled":"false","wordBoundaryEnabled":"false"},"outputFormat":"${opts.format || EDGE_DEFAULT_FORMAT}"}}}}\r\n`,
+			`{"context":{"synthesis":{"audio":{"metadataoptions":{"sentenceBoundaryEnabled":"true","wordBoundaryEnabled":"false"},"outputFormat":"${opts.format || EDGE_DEFAULT_FORMAT}"}}}}\r\n`,
 	);
 	const ssml =
 		`<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='en-US'>` +
@@ -100,7 +111,21 @@ export async function edgeSynthesise(text: string, opts: EdgeOptions, timeoutMs 
 
 	await done;
 	if (!parts.length) throw new Error("Edge TTS: no audio received");
-	return concat(parts);
+	return { audio: concat(parts), cues };
+}
+
+/** Sentence times from an "audio.metadata" message. Offset and Duration are in 100 ns ticks. */
+function readCues(message: string): Cue[] {
+	try {
+		const body = JSON.parse(message.slice(message.indexOf("\r\n\r\n") + 4)) as {
+			Metadata?: { Type: string; Data: { Offset: number; Duration: number; text?: { Text?: string } } }[];
+		};
+		return (body.Metadata ?? [])
+			.filter((m) => m.Type === "SentenceBoundary" && m.Data.text?.Text?.trim())
+			.map((m) => ({ start: m.Data.Offset / 1e7, end: (m.Data.Offset + m.Data.Duration) / 1e7, text: unescapeXml(m.Data.text!.Text!.trim()) }));
+	} catch {
+		return [];
+	}
 }
 
 /** Escape the text, and put a short silence between paragraphs. */
