@@ -1,5 +1,5 @@
-import { coverPng } from "./cover";
-import { fetchArticle } from "./extract";
+import cover from "../assets/cover.jpg";
+import { chunkText, fetchArticle } from "./extract";
 import { mp3Duration, speak, type TtsEnv } from "./tts";
 
 export interface Env extends TtsEnv {
@@ -28,13 +28,22 @@ type Item = {
 	chars?: number;
 	error?: string;
 	updated?: string;
+	part?: number; // Set on long articles that are split into several episodes.
+	parts?: number;
 };
 
 // ---------- Storage (R2 only) ----------
 // items/<id>  JSON item, also copied into customMetadata so one list() call builds the feed.
 // audio/<id>.mp3
 
+// parts/<id>.txt  Text for one part of a long article, deleted when that part is done.
+
 const itemKey = (id: string) => `items/${id}`;
+const partKey = (id: string) => `parts/${id}.txt`;
+
+// Articles longer than this are split into several episodes (about 40 minutes each).
+// Each part is its own queue job, so each part gets its own subrequest and time limits.
+const PART_CHARS = 40_000;
 const audioKey = (id: string) => `audio/${id}.mp3`;
 
 async function saveItem(env: Env, item: Item): Promise<void> {
@@ -171,7 +180,7 @@ function feedXml(env: Env, origin: string, items: Item[]): string {
 <title>${esc(name)}</title>
 <link>${esc(i.url)}</link>
 <guid isPermaLink="false">${esc(i.id)}</guid>
-<pubDate>${new Date(i.updated ?? i.created).toUTCString()}</pubDate>
+<pubDate>${new Date(i.created).toUTCString()}</pubDate>
 <description>${esc(desc)}</description>
 <enclosure url="${esc(`${base}/audio/${i.id}.mp3`)}" length="${i.bytes ?? 0}" type="audio/mpeg"/>
 <itunes:duration>${hms(i.duration)}</itunes:duration>
@@ -189,8 +198,8 @@ ${i.byline ? `<itunes:author>${esc(i.byline)}</itunes:author>` : ""}
 <description>Articles read aloud. Episodes disappear after ${Number(env.RETENTION_DAYS) || 30} days.</description>
 <language>en</language>
 <itunes:author>${esc(title)}</itunes:author>
-<itunes:image href="${esc(`${base}/cover.png`)}"/>
-<image><url>${esc(`${base}/cover.png`)}</url><title>${esc(title)}</title><link>${esc(base)}</link></image>
+<itunes:image href="${esc(`${base}/cover.jpg?v=2`)}"/>
+<image><url>${esc(`${base}/cover.jpg?v=2`)}</url><title>${esc(title)}</title><link>${esc(base)}</link></image>
 <itunes:block>Yes</itunes:block>
 <itunes:explicit>false</itunes:explicit>
 <itunes:category text="News"/>
@@ -236,7 +245,7 @@ async function handleFetch(req: Request, env: Env): Promise<Response> {
 		return new Response(feedXml(env, url.origin, await listItems(env)), {
 			headers: { "Content-Type": "application/rss+xml; charset=utf-8", "Cache-Control": "private, max-age=300" },
 		});
-	if (a === "cover.png") return new Response(await coverPng(), { headers: { "Content-Type": "image/png", "Cache-Control": "public, max-age=604800" } });
+	if (a === "cover.jpg" || a === "cover.png") return new Response(cover, { headers: { "Content-Type": "image/jpeg", "Cache-Control": "public, max-age=604800" } });
 	if (a === "audio" && b?.endsWith(".mp3")) return serveAudio(env, req, b.slice(0, -4));
 	if (a === "add") {
 		const { target } = await readAddRequest(req, url);
@@ -325,13 +334,11 @@ async function processJob(env: Env, job: Job, attempt: number): Promise<void> {
 	item.status = "processing";
 	await saveItem(env, item);
 	try {
-		const art = await fetchArticle(item.url);
-		item.title = art.title;
-		item.byline = art.byline;
-		item.site = art.site;
-		item.excerpt = art.excerpt ?? art.text.slice(0, 300);
-		const intro = [art.title.replace(/[.!?]?$/, "."), art.byline && `By ${art.byline}.`, art.site && `From ${art.site}.`].filter(Boolean).join(" ");
-		const script = `${intro}\n\n${art.text}\n\nEnd of article.`;
+		const text = item.part ? await partText(env, item) : await firstPart(env, item);
+		const partNote = item.parts ? ` Part ${item.part} of ${item.parts}.` : "";
+		const intro = [item.title?.replace(/[.!?]?$/, "."), item.byline && `By ${item.byline}.`, item.site && `From ${item.site}.`].filter(Boolean).join(" ") + partNote;
+		const outro = item.parts && item.part !== item.parts ? `End of part ${item.part}. Part ${(item.part ?? 1) + 1} follows.` : "End of article.";
+		const script = `${intro}\n\n${text}\n\n${outro}`;
 		item.chars = script.length;
 		const { mp3, engine, edgeError } = await speak(env, script);
 		await env.AUDIO.put(audioKey(item.id), mp3, { httpMetadata: { contentType: "audio/mpeg" } });
@@ -341,6 +348,7 @@ async function processJob(env: Env, job: Job, attempt: number): Promise<void> {
 		item.error = edgeError ? `Edge TTS failed, used Workers AI: ${edgeError}` : undefined;
 		item.status = "done";
 		await saveItem(env, item);
+		if (item.parts) await env.AUDIO.delete(partKey(item.id));
 	} catch (e) {
 		const msg = String((e as Error)?.message ?? e);
 		console.error(`Job ${item.id} attempt ${attempt} failed:`, msg);
@@ -349,6 +357,41 @@ async function processJob(env: Env, job: Job, attempt: number): Promise<void> {
 		await saveItem(env, item);
 		if (attempt < MAX_ATTEMPTS) throw e;
 	}
+}
+
+/** Fetch the article for a new item. If it is long, queue parts 2..n as their own items and return the text for part 1. */
+async function firstPart(env: Env, item: Item): Promise<string> {
+	const art = await fetchArticle(item.url);
+	item.title = art.title;
+	item.byline = art.byline;
+	item.site = art.site;
+	item.excerpt = art.excerpt ?? art.text.slice(0, 300);
+	const n = Math.ceil(art.text.length / PART_CHARS);
+	if (n <= 1) return art.text;
+	// Balanced parts, split at paragraph or sentence breaks.
+	const chunks = chunkText(art.text, Math.ceil((art.text.length / n) * 1.05));
+	const parts = chunks.length;
+	const created = Date.parse(item.created);
+	for (let i = 1; i < parts; i++) {
+		// Later parts get later dates, so podcast apps list them in order.
+		const p: Item = { ...item, id: `${item.id}-p${i + 1}`, part: i + 1, parts, status: "queued", created: new Date(created + i * 1000).toISOString() };
+		p.title = `${art.title} (Part ${i + 1} of ${parts})`;
+		await env.AUDIO.put(partKey(p.id), chunks[i]);
+		await saveItem(env, p);
+		await env.JOBS.send({ id: p.id });
+	}
+	item.part = 1;
+	item.parts = parts;
+	// Keep part 1's text too, so a retry does not split the article again.
+	await env.AUDIO.put(partKey(item.id), chunks[0]);
+	item.title = `${art.title} (Part 1 of ${parts})`;
+	return chunks[0];
+}
+
+async function partText(env: Env, item: Item): Promise<string> {
+	const obj = await env.AUDIO.get(partKey(item.id));
+	if (!obj) throw new Error(`Text for part ${item.part} is missing`);
+	return obj.text();
 }
 
 export default {
@@ -372,7 +415,7 @@ export default {
 	// Daily clean-up. The R2 lifecycle rule also deletes old objects; this is a backup.
 	async scheduled(_ctl, env) {
 		const cutoff = Date.now() - retentionMs(env);
-		for (const prefix of ["items/", "audio/"]) {
+		for (const prefix of ["items/", "audio/", "parts/"]) {
 			let cursor: string | undefined;
 			do {
 				const page = await env.AUDIO.list({ prefix, cursor, limit: 1000 });
