@@ -50,6 +50,8 @@ type Item = {
 	gone?: boolean; // The audio was deleted after RETENTION_DAYS. Only the text is left (🍖 MEAT).
 	aired?: string; // When the audio was last made, if it was made again. The feed uses it for the date.
 	transcript?: boolean; // A timed transcript is in audio/<id>.vtt. It is deleted with the audio.
+	attempt?: number; // The queue try that is running, or that ran last.
+	retryAt?: string; // When the queue tries again, after a failed try.
 };
 
 // Text for one episode, with the headings that become chapters.
@@ -319,6 +321,25 @@ const STUCK_MS = 40 * 60_000;
 /** Show Re-chomp on every item, except one that is in the queue or being chewed now. */
 const canRechomp = (i: Item) => (i.status !== "queued" && i.status !== "processing") || Date.now() - Date.parse(i.updated ?? i.created) > STUCK_MS;
 
+// A queue run lasts at most 15 minutes. A run that Cloudflare stops (too much CPU) cannot update its item, so an older "processing" item is waiting for its next try.
+const RUN_MS = 16 * 60_000;
+const chewing = (i: Item) => i.status === "processing" && Date.now() - Date.parse(i.updated ?? i.created) < RUN_MS;
+
+/** Queue details for the status page, such as "Try 2 of 7 · started 3 min ago". */
+function progress(i: Item): string {
+	const mins = (ms: number) => `${Math.max(1, Math.round(ms / 60_000))} min`;
+	const a = i.attempt;
+	if (chewing(i)) return a ? `Try ${a} of ${MAX_ATTEMPTS} · started ${mins(Date.now() - Date.parse(i.updated ?? i.created))} ago` : "";
+	if (i.status === "processing") return a ? `Try ${a} of ${MAX_ATTEMPTS} was stopped. Try ${a + 1} soon.` : "Stopped. Trying again soon.";
+	if (i.status === "queued") {
+		if (!a) return "Waiting for my teeth.";
+		const wait = i.retryAt ? Date.parse(i.retryAt) - Date.now() : 0;
+		return `Try ${a + 1} of ${MAX_ATTEMPTS} ${wait > 30_000 ? `in about ${mins(wait)}` : "any moment now"}`;
+	}
+	if (i.status === "failed" && a) return `Gave up after ${a} ${a === 1 ? "try" : "tries"}.`;
+	return "";
+}
+
 const STATUS_LABEL: Record<Status, string> = { queued: "🫦 MOUTH", processing: "🦷 CHEWING", done: "💥 NOISE", failed: "🤮 YUCK" };
 // Done, but the audio is gone. Only the text is left.
 const MEAT = "🍖 MEAT";
@@ -330,9 +351,13 @@ function statusPage(env: Env, origin: string, items: Item[], note = ""): string 
 	const title = "🍖 PODCHAST";
 	const rows = items
 		.map((i) => {
+			// A stopped run waits in the queue, so it shows as MOUTH.
+			const shown: Status = i.status === "processing" && !chewing(i) ? "queued" : i.status;
+			const step = progress(i);
 			const meta = [i.duration && hms(i.duration), i.words && `${i.words.toLocaleString("en-GB")} words`, i.chapters && `${i.chapters} chapters`, i.site, new Date(i.created).toLocaleDateString("en-GB", { day: "numeric", month: "short" })].filter(Boolean);
 			return `<li class="card">
-<div class="row">${i.gone && i.status === "done" ? `<span class="pill meat">${MEAT}</span>` : `<span class="pill ${i.status}">${STATUS_LABEL[i.status]}</span>`}<span class="meta">${esc(meta.join(" · "))}</span></div>
+<div class="row">${i.gone && i.status === "done" ? `<span class="pill meat">${MEAT}</span>` : `<span class="pill ${shown}">${STATUS_LABEL[shown]}</span>`}<span class="meta">${esc(meta.join(" · "))}</span></div>
+${step ? `<p class="meta">${esc(step)}</p>` : ""}
 ${i.title ? `<h3>${esc(i.title)}</h3>` : `<h3 class="url">${esc(i.url || "Some text")}</h3>`}
 ${i.error ? `<p class="err">${i.status === "queued" || i.status === "processing" ? "Last try failed. I will try again. " : ""}${esc(i.error)}</p>` : ""}
 <div class="row actions">${i.saved ? `<a href="${esc(`${base}/read/${rootId(i.id)}`)}">Read</a>` : ""}${i.status === "done" && !i.gone ? `<a href="${esc(`${base}/audio/${i.id}.mp3`)}">Play</a>` : ""}${i.url ? `<a href="${esc(i.url)}">Source</a>` : ""}${i.pdf ? `<a href="${esc(`${base}/read/${rootId(i.id)}.pdf`)}">PDF</a>` : ""}${canRechomp(i) ? `<form method="post" action="${esc(`${base}/retry/${i.id}`)}"><button class="link">Re-chomp</button></form>` : ""}
@@ -619,6 +644,8 @@ async function handleFetch(req: Request, env: Env): Promise<Response> {
 		const force = item.status === "done";
 		item.status = "queued";
 		item.error = undefined;
+		item.attempt = undefined;
+		item.retryAt = undefined;
 		await saveItem(env, item);
 		await env.JOBS.send({ id: item.id, force });
 		if (wantsHtml(req)) return Response.redirect(`${url.origin}/${env.TOKEN}`, 303);
@@ -714,6 +741,8 @@ async function processJob(env: Env, job: Job, attempt: number): Promise<void> {
 	const item = await loadItem(env, job.id);
 	if (!item || (item.status === "done" && !job.force)) return;
 	item.status = "processing";
+	item.attempt = attempt;
+	item.retryAt = undefined;
 	// Re-chomp of 🍖 MEAT or of a done episode: read the kept text again, and split it again if it is long.
 	const again = (item.gone || !!job.force) && (item.part ?? 1) === 1;
 	if (again) {
@@ -747,6 +776,7 @@ async function processJob(env: Env, job: Job, attempt: number): Promise<void> {
 		item.engine = engine;
 		item.error = edgeError ? `Edge TTS failed, used Workers AI: ${edgeError}` : undefined;
 		item.status = "done";
+		item.attempt = undefined;
 		if (item.gone || again) {
 			item.gone = undefined;
 			item.aired = new Date().toISOString();
@@ -760,6 +790,7 @@ async function processJob(env: Env, job: Job, attempt: number): Promise<void> {
 		// Do not retry an error that a retry cannot fix. Each retry runs Edge TTS again.
 		const last = attempt >= MAX_ATTEMPTS || isPermanent(e);
 		item.status = last ? "failed" : "queued";
+		if (!last) item.retryAt = new Date(Date.now() + retryDelay(attempt) * 1000).toISOString();
 		if (last) await addFailureClip(env, item);
 		await saveItem(env, item);
 		if (!last) throw e;
