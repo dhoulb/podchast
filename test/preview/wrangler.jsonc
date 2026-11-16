@@ -1,0 +1,8 @@
+{
+  "name": "podchast-preview",
+  "main": "dev.ts",
+  "compatibility_date": "2025-09-01",
+  "rules": [{ "type": "Data", "globs": ["**/*.jpg", "**/*.png"], "fallthrough": false }],
+  "r2_buckets": [{ "binding": "AUDIO", "bucket_name": "podchast" }],
+  "vars": { "TOKEN": "devtoken", "FEED_TITLE": "🍖 PODCHAST", "RETENTION_DAYS": "90", "SHORTCUT_URL": "https://www.icloud.com/shortcuts/x", "EMAIL_TO": "devour@example.com", "TTS_ENGINE": "edge-only" }
+}
