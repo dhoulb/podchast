@@ -3,7 +3,16 @@
 // each block sits in (articleBody / article / main / page chrome), then keep
 // the best container's blocks.
 
-export type Article = { title: string; byline?: string; site?: string; excerpt?: string; text: string; lang?: string };
+export type Article = {
+	title: string;
+	byline?: string;
+	site?: string;
+	excerpt?: string;
+	text: string;
+	lang?: string;
+	image?: string; // og:image, absolute URL
+	headings?: string[]; // Heading paragraphs, exactly as they appear in `text`
+};
 
 const UAS = [
 	"Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1",
@@ -165,13 +174,20 @@ export async function extractArticle(resp: Response, url: string): Promise<Artic
 	const site = meta["og:site_name"] || host(url);
 	const title = (meta["og:title"] || meta["twitter:title"] || tidy(decodeEntities(titleTag)) || titleFromUrl(url)).trim();
 	// Drop a leading heading that repeats the title, and stray "Advertisement" lines.
+	const isHeading = new Set<string>();
 	const lines = chosen
-		.map((b) => (/^h\d$/.test(b.tag) && !/[.!?:]$/.test(b.text) ? `${b.text}.` : b.text))
+		.map((b) => {
+			if (!/^h\d$/.test(b.tag)) return b.text;
+			const t = /[.!?:]$/.test(b.text) ? b.text : `${b.text}.`;
+			isHeading.add(t);
+			return t;
+		})
 		.filter((t, i) => !(i < 3 && (sameText(t, title) || sameText(t, site))) && !/^(advertisement|ad|sponsored)\.?$/i.test(t));
 	// Cut the page tail ("Most popular", "Related tags", sign-up boxes) after the main text.
 	const kept = dedupe(lines).filter((t) => !JUNK_LINE.test(t));
 	const tail = kept.findIndex((t, i) => i >= kept.length * 0.6 && TAIL_START.test(t));
-	const text = (tail > 0 ? kept.slice(0, tail) : kept).join("\n\n");
+	const paras = tail > 0 ? kept.slice(0, tail) : kept;
+	const text = paras.join("\n\n");
 	if (text.length < 200) {
 		const count = (f: (b: Block) => boolean) => blocks.filter(f).length;
 		const stats = { depth, blocks: blocks.length, p: count((b) => b.tag === "p"), chrome: count((b) => b.chrome), body: count((b) => b.body), article: count((b) => b.article), main: count((b) => b.main), long: count((b) => b.text.length >= 30), tags: [...new Set(blocks.slice(0, 40).map((b) => `${b.tag}${b.chrome ? "*" : ""}:${b.text.length}`))].join(" ") };
@@ -185,7 +201,19 @@ export async function extractArticle(resp: Response, url: string): Promise<Artic
 		excerpt: meta["og:description"] || meta["description"] || meta["twitter:description"] || undefined,
 		text,
 		lang,
+		image: absUrl(meta["og:image"] || meta["twitter:image"], url),
+		headings: paras.filter((t) => isHeading.has(t) && t.length <= 200),
 	};
+}
+
+function absUrl(src: string | undefined, base: string): string | undefined {
+	if (!src) return undefined;
+	try {
+		const u = new URL(src, base);
+		return u.protocol === "https:" || u.protocol === "http:" ? u.href : undefined;
+	} catch {
+		return undefined;
+	}
 }
 
 const JUNK_LINE = /^(posts from this (author|topic) will be added to your daily email digest|this is the title for the native ad|share this (story|article)|(sign up|subscribe) (to|for) (our|the) newsletter)/i;

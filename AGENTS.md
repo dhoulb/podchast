@@ -25,12 +25,13 @@ Still ask Dave before you:
 - Cron `17 3 * * *`: deletes old items.
 - TTS: Microsoft Edge "Read aloud" voices over a WebSocket (`src/edge-tts.ts`, `src/edge-drm.ts`). Workers AI `@cf/deepgram/aura-2-en` is the fallback (`src/tts.ts`).
 - Article extraction: HTMLRewriter heuristics (`src/extract.ts`).
-- Routes and queue handler: `src/index.ts`. Cover art: `assets/cover.jpg` (1400x1400), bundled as bytes. Bump `?v=` in the feed when it changes, so podcast apps fetch it again.
+- Routes and queue handler: `src/index.ts`. Chapter tags: `src/id3.ts`. Cover art: `assets/cover.jpg` (1400x1400) and web app icons `assets/icon-*.png`, bundled as bytes. Bump `?v=` in the feed when it changes, so podcast apps fetch it again.
 
 ## URLs
 
 - Worker: `https://podchast.dhoulb.workers.dev`
-- Private routes start with `/<TOKEN>/`: status page, `feed.xml`, `add`, `audio/<id>.mp3`, `retry/<id>`.
+- Private routes start with `/<TOKEN>/`: status page, `feed.xml`, `add`, `audio/<id>.mp3`, `retry/<id>`, `delete/<id>`, `manifest.webmanifest`, `sw.js`, icons.
+- Failed items show in the feed as "Failed: …" with one shared clip, `audio/failed.mp3`, made on demand.
 - `TOKEN` is a Worker secret. Its source is the `TOKEN` GitHub Actions secret; each deploy copies it to Cloudflare. Never write it into the repo, commits, PRs or logs.
 
 ## Commands
@@ -47,7 +48,7 @@ When you change `src/extract.ts`, run the harness on all `test/fixture*.html` fi
 
 ## Deploy
 
-`.github/workflows/deploy.yml` runs `wrangler deploy` on every push to `main`, with the repository secret `CLOUDFLARE_API_KEY`. It then copies the `TOKEN` repository secret to the Worker. Optional repository variables `VOICE` and `RATE` override the defaults in `wrangler.jsonc`. Do not deploy by hand.
+`.github/workflows/deploy.yml` runs `wrangler deploy` on every push to `main`, with the repository secret `CLOUDFLARE_API_KEY`. It then copies the `TOKEN` repository secret to the Worker. Optional repository variables `VOICE`, `RATE` and `SHORTCUT_URL` override the defaults in `wrangler.jsonc`. Do not deploy by hand.
 
 ## Limits to keep in mind
 
