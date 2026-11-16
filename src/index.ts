@@ -283,9 +283,9 @@ ${i.error ? `<p class="err">${esc(i.error)}</p>` : ""}
 	const copy = (label: string, value: string, cls = "btn") =>
 		`<button type="button" class="${cls}" onclick="navigator.clipboard.writeText('${esc(value)}').then(()=>this.textContent=NOMS[Math.floor(Math.random()*NOMS.length)])">${label}</button>`;
 	const shortcut = env.SHORTCUT_URL
-		? `<p>HELLO TINY GLASS RECTANGLE. Tap <b>Copy my mouth URL</b>. Then tap <b>Put me in your share sheet</b>. When Shortcuts asks, PASTE MY MOUTH. Then from Safari or ANY app: <b>Share → Podchast</b> → I EAT IT. OM.</p>
-<div class="row">${copy("Copy my mouth URL 👄", `${base}/add`)}<a class="btn gold" href="${esc(env.SHORTCUT_URL)}">Put me in your share sheet 🦷</a></div>`
-		: `<p>NO SHORTCUT LINK?! RUDE. Fine. Build a Shortcut that sends a POST with JSON <code class="inline">{"url": "…"}</code> to my MOUTH. The README knows how. I do not read READMEs. I EAT them.</p><div class="row">${copy("Copy my mouth URL 👄", `${base}/add`)}</div>`;
+		? `<p>HELLO TINY GLASS RECTANGLE. Put me in your share sheet:</p><ol class="steps"><li>Tap <b>Copy MOUTH URL</b>.</li><li>Tap <b>Add to share sheet</b>. When Shortcuts asks, paste the URL.</li><li>In Safari or any app, tap <b>Share → Podchast</b>. I EAT IT. OM.</li></ol>
+<div class="row">${copy("Copy MOUTH URL 👄", `${base}/add`)}<a class="btn gold" href="${esc(env.SHORTCUT_URL)}">Add to share sheet 🦷</a></div>`
+		: `<p>NO SHORTCUT LINK?! RUDE. Fine. Build a Shortcut that sends a POST with JSON <code class="inline">{"url": "…"}</code> to my 👄 MOUTH URL. The README has the steps. (I do not read READMEs. I EAT them.)</p><div class="row">${copy("Copy MOUTH URL 👄", `${base}/add`)}</div>`;
 	return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>${esc(title)}</title>
 <link rel="manifest" href="${esc(base)}/manifest.webmanifest"><link rel="apple-touch-icon" href="${esc(base)}/icon-180.png"><link rel="icon" href="${esc(base)}/icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="${esc(title)}"><meta name="theme-color" content="#0392b4"><script>document.documentElement.classList.add("js")</script>
@@ -329,31 +329,33 @@ button.danger{color:var(--red)}
 .tabs a[aria-selected=true]{background:var(--parch);color:var(--ink);box-shadow:0 3px 0 rgba(0,0,0,.25)}
 .js .tab{display:none}.js .tab.on{display:block}
 .tab .panel:first-child{margin-top:0}
-.steps{display:block;padding-left:18px;list-style:disc}.steps li{margin:4px 0}
+.steps{display:block;padding-left:18px;list-style:disc}.steps li{margin:4px 0}ol.steps{list-style:decimal}.lead{color:#fff;font-weight:700;font-size:17px;margin:4px 4px 14px;text-shadow:0 2px 0 rgba(0,0,0,.25)}
 code.inline{display:inline;padding:1px 4px;border-style:solid}
 @media (prefers-color-scheme:dark){html{background:#04222c}:root{--parch:#2a2f3a;--parch-d:#444b59;--ink:#f3ead6;--wood:#e8cf9f;--teal-dd:#5fd8e6}body{background:radial-gradient(circle at 50% 0,#0b6f86 0,#06485a 45%,#04222c 100%) fixed}input[type=url],input[type=text],textarea,code{background:#1d222b !important;color:var(--ink)}.pill{color:#20293c}.pill.done,.pill.processing,.pill.failed{color:#fff}.btn,button.btn{border-color:#20293c;box-shadow:0 4px 0 #000}.btn.gold{color:#20293c}h1{-webkit-text-stroke-color:#20293c;text-shadow:0 4px 0 #000}.note{color:#20293c}}
 </style></head><body><main>
 <header><img src="${esc(base)}/icon-192.png" alt=""><div><h1>${esc(title)}</h1><p id="growl">ARTICLES IN. NOISES OUT. EVERYTHING EATEN AGAIN IN ${Number(env.RETENTION_DAYS) || 30} DAYS. OM NOM.</p></div></header>
-<nav class="tabs" role="tablist"><a href="#articles" role="tab">Articles</a><a href="#feed" role="tab">XML feed</a><a href="#share" role="tab">Share sheet</a></nav>
-<section id="articles" class="tab">
+<nav class="tabs" role="tablist"><a href="#mouth" role="tab">👄 MOUTH</a><a href="#guts" role="tab">🫀 GUTS</a><a href="#noises" role="tab">🔊 NOISES</a></nav>
+<section id="mouth" class="tab">
+<p class="lead">Feed things into my 👄 MOUTH. I store them in my 🫀 GUTS. Then you hear the 🔊 NOISES. OM NOM.</p>
+<div class="panel"><h2>Add a URL or content</h2><form class="add" method="post" action="${esc(base)}/add"><input type="url" name="url" placeholder="https://… (PUT A LINK IN MY MOUTH)"><button class="btn gold">INGEST</button>
+<details><summary>…or VOM A PILE OF TEXT AT ME 🤢</summary><input type="text" name="title" placeholder="Title (optional, I will guess)"><textarea name="content" rows="8" placeholder="Paste words. Markdown is fine. ## Headings become chapters. I EAT IT ALL."></textarea><button class="btn gold">INGEST</button></details></form></div>
+<div class="panel"><h2>📱 iPhone and iPad</h2>${shortcut}</div>
+<div class="panel"><h2>🔖 Any browser (Chrome too)</h2><ol class="steps"><li>Show your bookmarks bar. In Chrome, press <b>⌘⇧B</b>.</li><li>DRAG the button below onto the bar. Do NOT click it here.</li><li>On any article, click the bookmark. The page goes in my 👄 MOUTH.</li></ol><div class="row"><a class="btn gold" href="${esc(bookmarklet)}" onclick="event.preventDefault();this.textContent='DRAG ME. DO NOT POKE ME. 😤'">🍖 Feed Podchast</a></div><p class="meta">The bookmark holds your token. Keep it out of shared bookmark folders.</p></div>
+<div class="panel"><h2>💻 Mac</h2><ol class="steps"><li>The iPhone Shortcut syncs through iCloud. In Safari, use <b>Share → Podchast</b>.</li><li>Want me in your Dock? In Safari, choose <b>File → Add to Dock</b>. I will sit there. Watching. Hungry.</li></ol></div>
+<div class="panel"><h2>🤖 Android</h2><ol class="steps"><li>Open this page in Chrome.</li><li>Tap <b>Add to Home screen</b>.</li><li>Share any link to <b>Podchast</b>. I pay no rent. I eat links. OM.</li></ol></div>
+</section>
+<section id="guts" class="tab">
 ${note ? `<div class="panel note">${esc(note)}</div>` : ""}
-<div class="panel"><h2>FEED ME. FEED ME NOW. 🍖</h2><form class="add" method="post" action="${esc(base)}/add"><input type="url" name="url" placeholder="PUT A LINK IN MY MOUTH"><button class="btn gold">INGEST</button>
-<details><summary>…or VOM A PILE OF TEXT AT ME 🤢</summary><input type="text" name="title" placeholder="Title (optional, I will guess)"><textarea name="content" rows="8" placeholder="Paste words. Markdown is fine. # Headings become chapters. I EAT IT ALL."></textarea><button class="btn gold">INGEST</button></details></form></div>
-<ul>${rows || `<li class="card empty">MY BELLY IS EMPTY. I AM SO HUNGRY. I could eat a WHOLE NEWSLETTER. I could eat a TERMS OF SERVICE. Share me an article before I eat the CSS. 🫥</li>`}</ul>
+<p class="lead">Everything in my 🫀 GUTS. Chewed things become 🔊 NOISES. I digest it all after ${Number(env.RETENTION_DAYS) || 30} days.</p>
+<ul>${rows || `<li class="card empty">My 🫀 GUTS are EMPTY. I AM SO HUNGRY. I could eat a WHOLE NEWSLETTER. Go to <a href="#mouth">👄 MOUTH</a> and feed me before I eat the CSS. 🫥</li>`}</ul>
 </section>
-<section id="feed" class="tab">
-<div class="panel"><h2>MY GUTS (in XML) 🫀</h2><p>Give this URL to your podcast app so it can listen to my TUMMY. Do NOT show it to strangers. The token in it is my SECRET BELLY BUTTON. Anyone with it can feed me. Anyone.</p><code>${esc(base)}/feed.xml</code><div class="row" style="margin-top:10px">${copy("Copy my guts", `${base}/feed.xml`)}<a class="btn gold" href="${esc(base)}/feed.xml">Look inside me 👀</a></div></div>
-<div class="panel"><h2>Shove my guts into your app</h2><ul class="steps"><li><b>Pocket Casts:</b> Search, then paste my guts. SQUELCH.</li><li><b>Apple Podcasts:</b> Library, then <b>…</b>, then <b>Follow a Show by URL</b>. Yes it is hidden. Apple fears me.</li><li><b>Overcast:</b> <b>+</b>, then <b>Add URL</b>. Overcast is a nice app. I would eat it.</li></ul></div>
-</section>
-<section id="share" class="tab">
-<div class="panel"><h2>📱 iPhone and iPad (tiny chests)</h2>${shortcut}</div>
-<div class="panel"><h2>🔖 Any browser (Chrome too)</h2><p>DRAG this button to your bookmarks bar. Do NOT click it here. On any article, click the bookmark and I EAT THE PAGE. One click. OM. (No bookmarks bar in Chrome? Press <b>⌘⇧B</b>.)</p><div class="row"><a class="btn gold" href="${esc(bookmarklet)}" onclick="event.preventDefault();this.textContent='DRAG ME. DO NOT POKE ME. 😤'">🍖 Feed Podchast</a></div><p class="meta">It holds your token, so keep it out of shared bookmark folders.</p></div>
-<div class="panel"><h2>💻 Mac (big flat chest)</h2><p>The Shortcut floats over through the iCLOUD (a cloud I have tried to eat). It shows in Safari's <b>Share</b> menu on your Mac too. Want me in your Dock? Safari: <b>File → Add to Dock</b>. I will sit there. Watching. Hungry.</p></div>
-<div class="panel"><h2>🤖 Android (green robot snack)</h2><p>Open this page in Chrome. Tap <b>Add to Home screen</b>. Now I live in your share menu. I pay no rent. I eat links. OM.</p></div>
+<section id="noises" class="tab">
+<div class="panel"><h2>Listen to my 🔊 NOISES in your podcast player</h2><p>Copy this URL. Add it to your podcast app. Keep it secret: anyone with the token in it can feed me. ANYONE.</p><code>${esc(base)}/feed.xml</code><div class="row" style="margin-top:10px">${copy("Copy NOISES URL 🔊", `${base}/feed.xml`)}<a class="btn gold" href="${esc(base)}/feed.xml">Open raw XML 👀</a></div></div>
+<div class="panel"><h2>Add it to your app</h2><ul class="steps"><li><b>Pocket Casts:</b> tap <b>Search</b>, then paste the URL.</li><li><b>Apple Podcasts:</b> tap <b>Library</b>, then <b>…</b>, then <b>Follow a Show by URL</b>, then paste. (Yes, it is hidden. Apple fears me.)</li><li><b>Overcast:</b> tap <b>+</b>, then <b>Add URL</b>, then paste.</li></ul></div>
 </section>
 </main>
 <script>
-function show(){var id=(location.hash||"#articles").slice(1);if(!document.getElementById(id))id="articles";document.querySelectorAll(".tab").forEach(function(t){t.classList.toggle("on",t.id===id)});document.querySelectorAll(".tabs a").forEach(function(a){a.setAttribute("aria-selected",a.getAttribute("href")==="#"+id)})}
+function show(){var id=(location.hash||"#guts").slice(1);id={articles:"guts",feed:"noises",share:"mouth"}[id]||id;if(!document.getElementById(id))id="guts";document.querySelectorAll(".tab").forEach(function(t){t.classList.toggle("on",t.id===id)});document.querySelectorAll(".tabs a").forEach(function(a){a.setAttribute("aria-selected",a.getAttribute("href")==="#"+id)})}
 addEventListener("hashchange",show);show();
 document.querySelectorAll(".tabs a").forEach(function(a){a.addEventListener("click",function(e){e.preventDefault();history.replaceState(null,"",a.getAttribute("href"));show()})});
 var NOMS=["OM NOM! COPIED!","GULP! IN YOUR CLIPBOARD!","CHOMP. DONE. 🦷","*BURP* COPIED","YUM. CLIPBOARD FED."];
