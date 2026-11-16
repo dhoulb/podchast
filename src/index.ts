@@ -265,6 +265,8 @@ const STATUS_LABEL: Record<Status, string> = { queued: "😋 In my mouth", proce
 
 function statusPage(env: Env, origin: string, items: Item[], note = ""): string {
 	const base = `${origin}/${env.TOKEN}`;
+	// A bookmark that sends the current page to /add, then shows this page.
+	const bookmarklet = `javascript:location.href=${JSON.stringify(`${base}/add?url=`)}+encodeURIComponent(location.href)`;
 	const title = env.FEED_TITLE || "Podchast";
 	const rows = items
 		.map((i) => {
@@ -345,6 +347,7 @@ ${note ? `<div class="panel note">${esc(note)}</div>` : ""}
 </section>
 <section id="share" class="tab">
 <div class="panel"><h2>📱 iPhone and iPad (tiny chests)</h2>${shortcut}</div>
+<div class="panel"><h2>🔖 Any browser (Chrome too)</h2><p>DRAG this button to your bookmarks bar. Do NOT click it here. On any article, click the bookmark and I EAT THE PAGE. One click. OM. (No bookmarks bar in Chrome? Press <b>⌘⇧B</b>.)</p><div class="row"><a class="btn gold" href="${esc(bookmarklet)}" onclick="event.preventDefault();this.textContent='DRAG ME. DO NOT POKE ME. 😤'">🍖 Feed Podchast</a></div><p class="meta">It holds your token, so keep it out of shared bookmark folders.</p></div>
 <div class="panel"><h2>💻 Mac (big flat chest)</h2><p>The Shortcut floats over through the iCLOUD (a cloud I have tried to eat). It shows in Safari's <b>Share</b> menu on your Mac too. Want me in your Dock? Safari: <b>File → Add to Dock</b>. I will sit there. Watching. Hungry.</p></div>
 <div class="panel"><h2>🤖 Android (green robot snack)</h2><p>Open this page in Chrome. Tap <b>Add to Home screen</b>. Now I live in your share menu. I pay no rent. I eat links. OM.</p></div>
 </section>
@@ -356,6 +359,7 @@ document.querySelectorAll(".tabs a").forEach(function(a){a.addEventListener("cli
 var NOMS=["OM NOM! COPIED!","GULP! IN YOUR CLIPBOARD!","CHOMP. DONE. 🦷","*BURP* COPIED","YUM. CLIPBOARD FED."];
 var GROWLS=["ARTICLES IN. NOISES OUT. OM NOM.","I AM A CHEST. I AM HUNGRY. THESE FACTS ARE RELATED.","FEED ME WORDS. I SPIT OUT PODCASTS. THIS IS SCIENCE.","I ATE A PAYWALL ONCE. IT WAS CRUNCHY.","NOM NOM NOM NOM NOM NOM NOM NOM.","DO NOT PUT YOUR HAND IN ME. PUT A LINK IN ME.","I HAVE TEETH WHERE MY LID SHOULD BE. WHAT OF IT.","YOU LOOK CRUNCHY. JUST AN OBSERVATION.","I DREAM OF LONGREADS. 10,000 WORDS. MMMMM."];
 var g=document.getElementById("growl");if(g&&Math.random()<0.75)g.textContent=GROWLS[Math.floor(Math.random()*GROWLS.length)];
+if(location.pathname.endsWith("/add"))history.replaceState(null,"",${JSON.stringify(`${base}/`).replace(/</g, "\\u003c")}+location.hash);
 if("serviceWorker" in navigator)navigator.serviceWorker.register("${esc(base)}/sw.js").catch(()=>{})</script></body></html>`;
 }
 
