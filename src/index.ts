@@ -657,6 +657,8 @@ async function debugExtract(env: Env, id: string, url: string): Promise<void> {
 		try {
 			const r = await fetch(url, { signal: AbortSignal.timeout(30_000), headers: { "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1" } });
 			const html = await r.text();
+			// The whole page, so the extractor can be tested on it locally.
+			await env.AUDIO.put(`debug/extract-${id}.html`, html, { httpMetadata: { contentType: "text/html; charset=utf-8" } });
 			const at = html.search(/<p[ >]/i);
 			Object.assign(report, { status: r.status, type: r.headers.get("content-type"), length: html.length, pCount: (html.match(/<p[ >]/gi) ?? []).length, firstP: at >= 0 ? html.slice(Math.max(0, at - 300), at + 500) : html.slice(0, 800) });
 		} catch {}
