@@ -11,7 +11,7 @@
 	"r2_buckets": [{ "binding": "AUDIO", "bucket_name": "podchast" }],
 	"queues": {
 		"producers": [{ "binding": "JOBS", "queue": "podchast-jobs" }],
-		"consumers": [{ "queue": "podchast-jobs", "max_batch_size": 1, "max_batch_timeout": 1, "max_retries": 3, "max_concurrency": 3, "retry_delay": 60 }]
+		"consumers": [{ "queue": "podchast-jobs", "max_batch_size": 1, "max_batch_timeout": 1, "max_retries": 6, "max_concurrency": 3, "retry_delay": 60 }]
 	},
 	"ai": { "binding": "AI" },
 	"triggers": { "crons": ["17 3 * * *"] },
@@ -25,8 +25,8 @@
 		"PITCH": "-8%",
 		// Edge output format. 96 kbps sounds clearer than the 48 kbps default. Edge refuses 48 kHz / 192 kbps.
 		"EDGE_FORMAT": "audio-24khz-96kbitrate-mono-mp3",
-		// "edge" (default, falls back to Workers AI) or "workers-ai".
-		"TTS_ENGINE": "edge",
+		// "edge-only" (default: Edge, and retry later if it fails), "edge" (Edge, then Workers AI if it fails) or "workers-ai".
+		"TTS_ENGINE": "edge-only",
 		"AI_MODEL": "@cf/deepgram/aura-2-en",
 		"AI_SPEAKER": "",
 		// iCloud link to the iOS Shortcut. Shows an "Add to share sheet" button on the status page.

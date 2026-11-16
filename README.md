@@ -2,7 +2,7 @@
 
 Podchast turns web articles into a private podcast. Share a link from your iPhone. A Cloudflare Worker gets the article, reads it aloud, and puts the MP3 in a private podcast feed. Audio goes away after 90 days. The text (and the original PDF) stays forever, so Podchast is also a permanent read-later list.
 
-Everything runs on Cloudflare: Workers, Queues, R2 and (as a fallback) Workers AI. The Workers Free plan is enough.
+Everything runs on Cloudflare: Workers, Queues and R2. The Workers Free plan is enough.
 
 ## Set up your own
 
@@ -117,9 +117,9 @@ You can email or forward things to Podchast. A short email with a link adds that
 | Engine | Quality | Cost | Risk |
 | --- | --- | --- | --- |
 | Microsoft Edge "Read aloud" (default) | Very good neural voices | Free | Not an official API. Microsoft can change or block it. |
-| Workers AI `@cf/deepgram/aura-2-en` (fallback) | Good | About $0.03 per 1,000 characters (about $0.50 to $1 for a long article) | Official Cloudflare product |
+| Workers AI `@cf/deepgram/aura-2-en` (optional) | Good | About $0.03 per 1,000 characters (about $0.50 to $1 for a long article) | Official Cloudflare product |
 
-The Worker tries Edge TTS first. If Edge TTS fails three times, it uses Workers AI for the full article. The status page shows which engine made each episode.
+The Worker uses only Edge TTS (`TTS_ENGINE` is `edge-only`), so every episode has the same voice. If Edge TTS fails, the job waits and tries again, for about 90 minutes in total. Set `TTS_ENGINE` to `edge` to use Workers AI when Edge TTS fails (a different voice, and the free plan allows about 10 articles a day).
 
 "EdgeTTS" is the Edge "Read aloud" service. The Worker talks to it over a WebSocket, the same as the [edge-tts](https://github.com/rany2/edge-tts) Python package. The token code in `src/edge-drm.ts` is a port of edge-tts 7.3.1. If Edge TTS stops working, compare that file with the latest edge-tts `drm.py` and `constants.py`.
 
