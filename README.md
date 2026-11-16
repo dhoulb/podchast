@@ -6,7 +6,7 @@ Everything runs on Cloudflare: Workers, Queues, R2 and (as a fallback) Workers A
 
 ## How it works
 
-1. An iOS Shortcut sends the link to `POST /add`.
+1. An iOS Shortcut sends the link to `POST /<TOKEN>/add`.
 2. The Worker saves an item in R2 and puts a job on the queue.
 3. The queue consumer gets the page and finds the article text (HTMLRewriter, no extra libraries).
 4. The consumer cuts the text into parts and sends each part to the TTS engine.
@@ -38,7 +38,8 @@ All private URLs contain the secret `TOKEN`. Keep them private.
 
 | URL | Use |
 | --- | --- |
-| `POST /add` | Add an article. Send the token as `Authorization: Bearer <TOKEN>`. Send the URL as JSON `{"url": "..."}`, as form field `url`, or as plain text. |
+| `POST /<TOKEN>/add` | Add an article. Send the URL as JSON `{"url": "..."}`, as form field `url`, or as plain text. Replies in plain text (JSON if you send `Accept: application/json`). |
+| `POST /add` | The same, with the token in an `Authorization: Bearer <TOKEN>` header. |
 | `GET /<TOKEN>` | Status page. Shows all items and has a form to add a URL. |
 | `GET /<TOKEN>/feed.xml` | Podcast feed. Add this to your podcast app. |
 | `GET /<TOKEN>/audio/<id>.mp3` | Episode audio (supports range requests). |
@@ -46,21 +47,24 @@ All private URLs contain the secret `TOKEN`. Keep them private.
 
 ## iOS Shortcut
 
+The Shortcut has two actions.
+
 1. Open the **Shortcuts** app. Tap **+** to make a new shortcut. Name it **Podchast**.
-2. Tap the **i** (details) button. Turn on **Show in Share Sheet**. Set the input types to **URLs** and **Safari web pages**. Close the details.
+2. Tap the **i** (details) button. Turn on **Show in Share Sheet**. Close the details.
 3. At the top, set **Receive** to *URLs and Safari web pages* from *Share Sheet*. Set **If there is no input** to **Get Clipboard**.
 4. Add the action **Get Contents of URL**:
-   - URL: `https://podchast.dave-houlbrooke.workers.dev/add`
-   - Method: **POST**
-   - Headers: add `Authorization` with value `Bearer <TOKEN>`
-   - Request Body: **JSON**. Add a field `url` (Text) with the value **Shortcut Input**.
-5. Add the action **Get Dictionary Value**. Get the value for `message` in **Contents of URL**.
-6. Add the action **Show Notification** with **Dictionary Value**.
-7. In Safari (or any app), tap **Share**, then **Podchast**. You see "Queued: …". The episode is ready in one to three minutes.
+   - URL: `https://podchast.dhoulb.workers.dev/<TOKEN>/add`
+   - Tap the arrow to show more. Set Method to **POST**.
+   - Request Body: **JSON**. Add a field. Key `url`, type **Text**, value **Shortcut Input**.
+   - You do not need headers. The token is in the URL.
+5. Add the action **Show Notification**. Set its text to **Contents of URL**.
+6. In Safari (or any app), tap **Share**, then **Podchast**. You see "Added to Podchast: …". The episode is ready in a few minutes.
+
+The reply is plain text. Errors are plain text too, for example "wrong or missing token".
 
 ## Podcast app
 
-Add `https://podchast.dave-houlbrooke.workers.dev/<TOKEN>/feed.xml` as a feed by URL.
+Add `https://podchast.dhoulb.workers.dev/<TOKEN>/feed.xml` as a feed by URL.
 
 - **Apple Podcasts**: Library, then **…**, then **Follow a Show by URL**.
 - **Overcast**: **+**, then **Add URL**.

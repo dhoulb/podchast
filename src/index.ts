@@ -224,10 +224,8 @@ async function handleFetch(req: Request, env: Env): Promise<Response> {
 	// POST /add (token in header, query or body) — used by the iOS Shortcut.
 	if (parts[0] === "add" && parts.length === 1) {
 		const { token, target } = await readAddRequest(req, url);
-		if (!safeEqual(token, env.TOKEN)) return new Response("Unauthorised", { status: 401 });
-		if (!target) return new Response("No URL found", { status: 400 });
-		const item = await addUrl(env, target);
-		return Response.json({ ok: true, id: item.id, message: `Queued: ${target}` });
+		if (!safeEqual(token, env.TOKEN)) return reply(req, 401, "Podchast: wrong or missing token.");
+		return queueReply(req, env, target);
 	}
 
 	// Everything else lives under /<token>/...
@@ -242,6 +240,8 @@ async function handleFetch(req: Request, env: Env): Promise<Response> {
 	if (a === "audio" && b?.endsWith(".mp3")) return serveAudio(env, req, b.slice(0, -4));
 	if (a === "add") {
 		const { target } = await readAddRequest(req, url);
+		// The status page form posts here from a browser. Shortcuts and scripts get a short text reply.
+		if (!wantsHtml(req)) return queueReply(req, env, target);
 		if (!target) return new Response("No URL found", { status: 400 });
 		await addUrl(env, target);
 		return html(statusPage(env, url.origin, await listItems(env), `Queued: ${target}`));
@@ -256,6 +256,20 @@ async function handleFetch(req: Request, env: Env): Promise<Response> {
 		return Response.json({ ok: true });
 	}
 	return new Response("Not found", { status: 404 });
+}
+
+const wantsHtml = (req: Request) => (req.headers.get("accept") ?? "").includes("text/html");
+
+/** Reply as JSON if the client asks for JSON, else as plain text (the iOS Shortcut shows it as a notification). */
+function reply(req: Request, status: number, message: string, extra: Record<string, unknown> = {}): Response {
+	if ((req.headers.get("accept") ?? "").includes("application/json")) return Response.json({ ok: status < 400, message, ...extra }, { status });
+	return new Response(message, { status, headers: { "Content-Type": "text/plain; charset=utf-8" } });
+}
+
+async function queueReply(req: Request, env: Env, target: string | null): Promise<Response> {
+	if (!target) return reply(req, 400, "Podchast: no link found. Share a web page or copy a link first.");
+	const item = await addUrl(env, target);
+	return reply(req, 200, `Added to Podchast: ${target}`, { id: item.id });
 }
 
 const html = (body: string) => new Response(body, { headers: { "Content-Type": "text/html; charset=utf-8" } });
