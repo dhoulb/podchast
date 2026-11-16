@@ -206,7 +206,7 @@ function hms(sec = 0): string {
 	return [h, m, s].map((n) => String(n).padStart(2, "0")).join(":");
 }
 
-function feedXml(env: Env, origin: string, items: Item[]): string {
+function feedXml(env: Env, origin: string, items: Item[], file = FEED): string {
 	const base = `${origin}/${env.TOKEN}`;
 	const about = esc(`${growl(Number(env.RETENTION_DAYS) || 30)}\n\nFeed my 👄 MOUTH here: ${base}`);
 	const title = env.FEED_TITLE || "Podchast";
@@ -249,7 +249,7 @@ ${i.byline ? `<itunes:author>${esc(i.byline)}</itunes:author>` : ""}
 <channel>
 <title>${esc(title)}</title>
 <link>${esc(base)}</link>
-<atom:link href="${esc(`${base}/feed.xml`)}" rel="self" type="application/rss+xml"/>
+<atom:link href="${esc(`${base}/${file}`)}" rel="self" type="application/rss+xml"/>
 <description>${about}</description>
 <itunes:summary>${about}</itunes:summary>
 <language>en</language>
@@ -266,6 +266,7 @@ ${entries}
 
 // Change the file name when the artwork changes, so podcast apps fetch it again.
 const COVER = "cover-v5.jpg";
+const FEED = "noises.xml";
 const HERO = "hero-v1.jpg";
 const coverResponse = () => new Response(cover, { headers: { "Content-Type": "image/jpeg", "Content-Length": String(cover.byteLength), "Cache-Control": "public, max-age=604800" } });
 
@@ -379,7 +380,7 @@ ${note ? `<div class="panel note">${esc(note)}</div>` : ""}
 <ul>${rows || `<li class="card empty">My 🫀 GUTS are EMPTY. I AM SO HUNGRY. I could eat a WHOLE NEWSLETTER. Go to <a href="#mouth">👄 MOUTH</a> and feed me before I eat the CSS. 🫥</li>`}</ul>
 </section>
 <section id="noises" class="tab">
-<div class="panel"><h2>Listen to my 🔊 NOISES in your podcast player</h2><p>Copy this URL. Add it to your podcast app. Keep it secret: anyone with the token in it can feed me. ANYONE.</p><code>${esc(base)}/feed.xml</code><div class="row" style="margin-top:10px">${copy("Copy NOISES URL 🔊", `${base}/feed.xml`)}<a class="btn gold" href="${esc(base)}/feed.xml">Open raw XML 👀</a></div></div>
+<div class="panel"><h2>Listen to my 🔊 NOISES in your podcast player</h2><p>Copy this URL. Add it to your podcast app. Keep it secret: anyone with the token in it can feed me. ANYONE.</p><code>${esc(base)}/${FEED}</code><div class="row" style="margin-top:10px">${copy("Copy NOISES URL 🔊", `${base}/${FEED}`)}<a class="btn gold" href="${esc(base)}/${FEED}">Open raw XML 👀</a></div></div>
 <div class="panel"><h2>Add it to your app</h2><ul class="steps"><li><b>Pocket Casts:</b> tap <b>Search</b>, then paste the URL.</li><li><b>Apple Podcasts:</b> tap <b>Library</b>, then <b>…</b>, then <b>Follow a Show by URL</b>, then paste. (Yes, it is hidden. Apple fears me.)</li><li><b>Overcast:</b> tap <b>+</b>, then <b>Add URL</b>, then paste.</li></ul></div>
 </section>
 </main>
@@ -434,8 +435,9 @@ async function handleFetch(req: Request, env: Env): Promise<Response> {
 	if (!parts.length || !safeEqual(parts[0], env.TOKEN)) return new Response("Not found", { status: 404 });
 	const [, a, b] = parts;
 	if (!a) return html(statusPage(env, url.origin, await listItems(env)));
-	if (a === "feed.xml" || a === "feed")
-		return new Response(feedXml(env, url.origin, await listItems(env)), {
+	// noises.xml is the main feed URL. feed.xml still works for old subscriptions.
+	if (a === FEED || a === "feed.xml" || a === "feed")
+		return new Response(feedXml(env, url.origin, await listItems(env), a === "feed" ? "feed.xml" : a), {
 			headers: { "Content-Type": "application/rss+xml; charset=utf-8", "Cache-Control": "private, max-age=300" },
 		});
 	if (a === "cover.jpg" || a === "cover.png") return coverResponse();

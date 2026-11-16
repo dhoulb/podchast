@@ -80,7 +80,7 @@ To share your own Shortcut: in the Shortcut, tap **i**, then **Setup**, and add 
 
 ### 6. Add the feed to your podcast app
 
-Add `https://podchast.<your-subdomain>.workers.dev/<TOKEN>/feed.xml` as a feed by URL.
+Add `https://podchast.<your-subdomain>.workers.dev/<TOKEN>/noises.xml` as a feed by URL.
 
 - **Apple Podcasts**: Library, then **…**, then **Follow a Show by URL**.
 - **Overcast**: **+**, then **Add URL**.
@@ -95,7 +95,7 @@ Add `https://podchast.<your-subdomain>.workers.dev/<TOKEN>/feed.xml` as a feed b
 5. The consumer joins the MP3 parts and writes one file to R2.
    Article headings become chapters (ID3 `CHAP` frames in the MP3).
    Articles longer than 40,000 characters (about 40 minutes) become several episodes: "Part 1 of 3", "Part 2 of 3" and so on. Each part is its own queue job.
-6. `GET /<TOKEN>/feed.xml` shows the finished items as a podcast feed.
+6. `GET /<TOKEN>/noises.xml` shows the finished items as a podcast feed.
 7. If an article fails three times, the feed gets a short "🤮 SPAT OUT: …" episode. Its notes give the reason.
 8. An R2 lifecycle rule deletes files after 31 days. The feed hides items after 30 days. A daily cron also deletes old files.
 
@@ -128,7 +128,7 @@ All private URLs contain the secret `TOKEN`. Keep them private.
 | `POST /<TOKEN>/add` (text) | Add text instead of a web page. Send JSON `{"content": "...", "title": "..."}`. `title` is optional. `url` is optional and becomes the source link. Markdown is made plain, and `##` headings become chapters. A plain-text body with no link and over 200 characters is also read as text. Limit: 400,000 characters. |
 | `POST /add` | The same, with the token in an `Authorization: Bearer <TOKEN>` header. |
 | `GET /<TOKEN>` | Status page. Shows all items and has a form to add a URL or paste text. |
-| `GET /<TOKEN>/feed.xml` | Podcast feed. Add this to your podcast app. |
+| `GET /<TOKEN>/noises.xml` | Podcast feed. Add this to your podcast app. `feed.xml` is the old name and still works. |
 | `GET /cover-v5.jpg` | Podcast artwork (`assets/cover.jpg`, 1400x1400). Public, so podcast apps can fetch it. |
 | `GET /<TOKEN>/audio/<id>.mp3` | Episode audio (supports range requests). |
 | `POST /<TOKEN>/retry/<id>` | Try a failed item again. |
