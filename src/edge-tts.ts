@@ -36,7 +36,12 @@ export type Cue = { start: number; end: number; text: string };
  * Synthesise one chunk of plain text (≤ ~4000 bytes after escaping).
  * Returns MP3 bytes (by default 24kHz 48kbps mono), and the time of each sentence.
  */
-export async function edgeSynthesise(text: string, opts: EdgeOptions, timeoutMs = 60_000): Promise<{ audio: Uint8Array; cues: Cue[] }> {
+/**
+ * idleMs: fail when Edge sends nothing for this long. Edge can stream one part
+ * slowly for minutes, so a stall, not total time, is the sign of a dead socket.
+ * maxMs: hard limit for the whole part.
+ */
+export async function edgeSynthesise(text: string, opts: EdgeOptions, idleMs = 30_000, maxMs = 300_000): Promise<{ audio: Uint8Array; cues: Cue[] }> {
 	const url =
 		`${WSS_URL}&ConnectionId=${uuid()}` +
 		`&Sec-MS-GEC=${generateSecMsGec()}&Sec-MS-GEC-Version=${SEC_MS_GEC_VERSION}`;
@@ -65,18 +70,23 @@ export async function edgeSynthesise(text: string, opts: EdgeOptions, timeoutMs 
 	const cues: Cue[] = [];
 	const seen: string[] = []; // Paths of text messages, for error reports.
 	const done = new Promise<void>((resolve, reject) => {
-		const timer = setTimeout(() => finish(new Error(`Edge TTS: timeout (messages: ${seen.join(",") || "none"}, audio parts: ${parts.length})`)), timeoutMs);
+		const fail = (why: string) => () => finish(new Error(`Edge TTS: ${why} (text messages: ${seen.length}, audio parts: ${parts.length})`));
+		const hardTimer = setTimeout(fail(`timeout after ${maxMs / 1000} s`), maxMs);
+		let idleTimer = setTimeout(fail(`no data for ${idleMs / 1000} s`), idleMs);
 		let finished = false;
 		const finish = (err?: Error) => {
 			if (finished) return;
 			finished = true;
-			clearTimeout(timer);
+			clearTimeout(hardTimer);
+			clearTimeout(idleTimer);
 			try {
 				ws.close(1000);
 			} catch {}
 			err ? reject(err) : resolve();
 		};
 		ws.addEventListener("message", (ev) => {
+			clearTimeout(idleTimer);
+			idleTimer = setTimeout(fail(`no data for ${idleMs / 1000} s`), idleMs);
 			const data = ev.data;
 			if (typeof data === "string") {
 				seen.push(/Path:([\w.]+)/.exec(data)?.[1] ?? "?");
@@ -87,7 +97,7 @@ export async function edgeSynthesise(text: string, opts: EdgeOptions, timeoutMs 
 			const buf = new Uint8Array(data as ArrayBuffer);
 			if (buf.length < 2) return;
 			const headerLen = (buf[0] << 8) | buf[1];
-			const header = new TextDecoder().decode(buf.subarray(2, 2 + headerLen));
+			const header = decoder.decode(buf.subarray(2, 2 + headerLen));
 			if (!header.includes("Path:audio")) return;
 			const audio = buf.subarray(2 + headerLen);
 			if (audio.length && header.includes("Content-Type:audio/mpeg")) parts.push(audio.slice());
@@ -133,6 +143,8 @@ function speechText(text: string, pause = 0): string {
 	const safe = escapeXml(text);
 	return pause > 0 ? safe.replace(/\n\s*\n/g, ` <break time='${Math.min(pause, 3000)}ms'/> `) : safe;
 }
+
+const decoder = new TextDecoder();
 
 export function concat(parts: Uint8Array[]): Uint8Array {
 	const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
