@@ -250,7 +250,7 @@ function feedXml(env: Env, origin: string, items: Item[], file = FEED): string {
 						facts.length && `<p>${esc(facts.join(" · "))}</p>`,
 					].filter(Boolean);
 			const plain = failed ? `BLEURGH! I could not eat this article. Stuck in my teeth: ${i.error ?? "a mystery bone"}. ${i.url}`.trim() : [i.excerpt, i.byline && `By ${i.byline}.`, i.url && `Source: ${i.url}`, facts.join(" · ")].filter(Boolean).join("\n\n");
-			const audio = failed ? `${base}/audio/${FAILED_ID}.mp3?for=${i.id}` : `${base}/audio/${i.id}.mp3`;
+			const audio = failed ? `${base}/audio/${FAILED_ID}.mp3?for=${i.id}` : `${base}/audio/${i.id}.mp3${i.aired ? `?v=${Date.parse(i.aired)}` : ""}`;
 			return `<item>
 <title>${esc(name)}</title>
 <link>${esc(i.url || base)}</link>
@@ -260,7 +260,7 @@ function feedXml(env: Env, origin: string, items: Item[], file = FEED): string {
 <content:encoded><![CDATA[${notes.join("\n").replaceAll("]]>", "]]&gt;")}]]></content:encoded>
 <enclosure url="${esc(audio)}" length="${i.bytes ?? 0}" type="audio/mpeg"/>
 <itunes:duration>${hms(i.duration)}</itunes:duration>
-${i.transcript && !failed ? `<podcast:transcript url="${esc(`${base}/audio/${i.id}.vtt`)}" type="text/vtt" language="en" rel="captions"/>` : ""}
+${i.transcript && !failed ? `<podcast:transcript url="${esc(`${base}/audio/${i.id}.vtt${i.aired ? `?v=${Date.parse(i.aired)}` : ""}`)}" type="text/vtt" language="en" rel="captions"/>` : ""}
 ${i.image && !failed ? `<itunes:image href="${esc(i.image)}"/>` : ""}
 ${i.byline ? `<itunes:author>${esc(i.byline)}</itunes:author>` : ""}
 <itunes:explicit>false</itunes:explicit>
@@ -313,6 +313,12 @@ function growl(days: number): string {
 	return `${line} NOISES fade after ${days} days. The words stay in my 🕳️ ABYSS FOREVER. 🦷📜💥`;
 }
 
+// A job in the queue updates its item at least every 30 minutes (the longest retry gap), so an older one is stuck.
+const STUCK_MS = 40 * 60_000;
+
+/** Show Re-chomp on every item, except one that is in the queue or being chewed now. */
+const canRechomp = (i: Item) => (i.status !== "queued" && i.status !== "processing") || Date.now() - Date.parse(i.updated ?? i.created) > STUCK_MS;
+
 const STATUS_LABEL: Record<Status, string> = { queued: "🫦 MOUTH", processing: "🦷 CHEWING", done: "💥 NOISE", failed: "🤮 YUCK" };
 // Done, but the audio is gone. Only the text is left.
 const MEAT = "🍖 MEAT";
@@ -329,7 +335,7 @@ function statusPage(env: Env, origin: string, items: Item[], note = ""): string 
 <div class="row">${i.gone && i.status === "done" ? `<span class="pill meat">${MEAT}</span>` : `<span class="pill ${i.status}">${STATUS_LABEL[i.status]}</span>`}<span class="meta">${esc(meta.join(" · "))}</span></div>
 ${i.title ? `<h3>${esc(i.title)}</h3>` : `<h3 class="url">${esc(i.url || "Some text")}</h3>`}
 ${i.error ? `<p class="err">${esc(i.error)}</p>` : ""}
-<div class="row actions">${i.saved ? `<a href="${esc(`${base}/read/${rootId(i.id)}`)}">Read</a>` : ""}${i.status === "done" && !i.gone ? `<a href="${esc(`${base}/audio/${i.id}.mp3`)}">Play</a>` : ""}${i.url ? `<a href="${esc(i.url)}">Source</a>` : ""}${i.pdf ? `<a href="${esc(`${base}/read/${rootId(i.id)}.pdf`)}">PDF</a>` : ""}${i.status === "failed" || (i.gone && i.status === "done" && (i.part ?? 1) === 1) ? `<form method="post" action="${esc(`${base}/retry/${i.id}`)}"><button class="link">Re-chomp</button></form>` : ""}
+<div class="row actions">${i.saved ? `<a href="${esc(`${base}/read/${rootId(i.id)}`)}">Read</a>` : ""}${i.status === "done" && !i.gone ? `<a href="${esc(`${base}/audio/${i.id}.mp3`)}">Play</a>` : ""}${i.url ? `<a href="${esc(i.url)}">Source</a>` : ""}${i.pdf ? `<a href="${esc(`${base}/read/${rootId(i.id)}.pdf`)}">PDF</a>` : ""}${canRechomp(i) ? `<form method="post" action="${esc(`${base}/retry/${i.id}`)}"><button class="link">Re-chomp</button></form>` : ""}
 <form method="post" action="${esc(`${base}/delete/${i.id}`)}" onsubmit="return confirm('DELETE this one? Forever? No take-backs??')"><button class="link danger">Delete</button></form></div>
 </li>`;
 		})
@@ -605,12 +611,16 @@ async function handleFetch(req: Request, env: Env): Promise<Response> {
 		return html(statusPage(env, url.origin, await listItems(env), `OM NOM NOM! In my mouth: ${add.content ? (add.title ?? "a big pile of text") : add.target} 😋 Chewing soon.`));
 	}
 	if (a === "retry" && b) {
-		const item = await loadItem(env, b);
+		let item = await loadItem(env, b);
 		if (!item) return new Response("Not found", { status: 404 });
+		// The text of a later part is deleted when the part is done. Then re-chomp the whole article from part 1.
+		if ((item.part ?? 1) > 1 && !(await env.AUDIO.head(partKey(item.id)))) item = (await loadItem(env, rootId(item.id))) ?? item;
+		// A done episode is made again from the kept text, with a new date, like 🍖 MEAT.
+		const force = item.status === "done";
 		item.status = "queued";
 		item.error = undefined;
 		await saveItem(env, item);
-		await env.JOBS.send({ id: item.id });
+		await env.JOBS.send({ id: item.id, force });
 		if (wantsHtml(req)) return Response.redirect(`${url.origin}/${env.TOKEN}`, 303);
 		return Response.json({ ok: true });
 	}
@@ -704,14 +714,15 @@ async function processJob(env: Env, job: Job, attempt: number): Promise<void> {
 	const item = await loadItem(env, job.id);
 	if (!item || (item.status === "done" && !job.force)) return;
 	item.status = "processing";
-	// Re-chomp of 🍖 MEAT: read the kept text again, and split it again if it is long.
-	if (item.gone && (item.part ?? 1) === 1) {
+	// Re-chomp of 🍖 MEAT or of a done episode: read the kept text again, and split it again if it is long.
+	const again = (item.gone || !!job.force) && (item.part ?? 1) === 1;
+	if (again) {
 		item.part = undefined;
 		item.parts = undefined;
 	}
 	await saveItem(env, item);
 	try {
-		const { text, headings } = item.part ? await partText(env, item) : await firstPart(env, item);
+		const { text, headings } = item.part ? await partText(env, item) : await firstPart(env, item, again);
 		const partNote = item.parts ? ` Part ${item.part} of ${item.parts}.` : "";
 		const intro = [item.title?.replace(/[.!?]?$/, "."), item.byline && `By ${item.byline}.`, item.site && `From ${item.site}.`].filter(Boolean).join(" ") + partNote;
 		const outro = item.parts && item.part !== item.parts ? `End of part ${item.part}. Part ${(item.part ?? 1) + 1} follows.` : "End of article.";
@@ -736,7 +747,7 @@ async function processJob(env: Env, job: Job, attempt: number): Promise<void> {
 		item.engine = engine;
 		item.error = edgeError ? `Edge TTS failed, used Workers AI: ${edgeError}` : undefined;
 		item.status = "done";
-		if (item.gone) {
+		if (item.gone || again) {
 			item.gone = undefined;
 			item.aired = new Date().toISOString();
 		}
@@ -756,7 +767,7 @@ async function processJob(env: Env, job: Job, attempt: number): Promise<void> {
 }
 
 /** Fetch the article for a new item. If it is long, queue parts 2..n as their own items and return the text for part 1. */
-async function firstPart(env: Env, item: Item): Promise<PartText> {
+async function firstPart(env: Env, item: Item, again = false): Promise<PartText> {
 	// Text we already keep is read from R2. A web page is only fetched the first time, so a re-chomp reads the copy we saved.
 	let pdf: ArrayBuffer | undefined;
 	const kept = item.text || item.saved;
@@ -787,13 +798,13 @@ async function firstPart(env: Env, item: Item): Promise<PartText> {
 	const chunks = chunkText(art.text, Math.ceil((art.text.length / n) * 1.05));
 	const parts = chunks.length;
 	// Later parts get later dates. A re-chomp starts from now, so the parts are new in the feed.
-	const created = item.gone ? Date.now() : Date.parse(item.created);
+	const created = again ? Date.now() : Date.parse(item.created);
 	const partOf = (t: string): PartText => ({ text: t, headings: headings.filter((h) => t.includes(h)) });
 	for (let i = 1; i < parts; i++) {
 		// Later parts get later dates, so podcast apps list them in order.
 		const at = new Date(created + i * 1000).toISOString();
-		const p: Item = { ...item, id: `${item.id}-p${i + 1}`, part: i + 1, parts, status: "queued", created: item.gone ? ((await loadItem(env, `${item.id}-p${i + 1}`))?.created ?? at) : at, pdf: undefined };
-		if (item.gone) p.aired = at;
+		const p: Item = { ...item, id: `${item.id}-p${i + 1}`, part: i + 1, parts, status: "queued", created: again ? ((await loadItem(env, `${item.id}-p${i + 1}`))?.created ?? at) : at, pdf: undefined };
+		if (again) p.aired = at;
 		p.title = `${art.title} (Part ${i + 1} of ${parts})`;
 		await env.AUDIO.put(partKey(p.id), JSON.stringify(partOf(chunks[i])));
 		await saveItem(env, p);
