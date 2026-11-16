@@ -14,7 +14,7 @@ Fork this repository.
 
 ### 2. Settings
 
-In your fork, open **Settings → Secrets and variables → Actions**. Add your settings there. If you put a setting on the wrong tab (a variable as a secret, or a secret as a variable), it still works. But variables show in the deploy log, and the log of a public repository is public. So keep `TOKEN`, `CLOUDFLARE_API_KEY` and `EMAIL_FROM` as secrets.
+In your fork, open **Settings → Secrets and variables → Actions**. Add your settings there. A variable that you put on the Secrets tab still works. Secrets must be on the Secrets tab: the deploy does not read `TOKEN`, `CLOUDFLARE_API_KEY` or `EMAIL_FROM` from variables, because variables show in the deploy log, and the log of a public repository is public.
 
 **Required.** Add these two repository secrets:
 
