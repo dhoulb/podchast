@@ -207,6 +207,7 @@ function hms(sec = 0): string {
 
 function feedXml(env: Env, origin: string, items: Item[]): string {
 	const base = `${origin}/${env.TOKEN}`;
+	const about = esc(`${growl(Number(env.RETENTION_DAYS) || 30)}\n\nFeed my 👄 MOUTH here: ${base}`);
 	const title = env.FEED_TITLE || "Podchast";
 	const entries = items
 		.filter((i) => i.status === "done" || i.status === "failed")
@@ -248,11 +249,12 @@ ${i.byline ? `<itunes:author>${esc(i.byline)}</itunes:author>` : ""}
 <title>${esc(title)}</title>
 <link>${esc(base)}</link>
 <atom:link href="${esc(`${base}/feed.xml`)}" rel="self" type="application/rss+xml"/>
-<description>OM NOM NOM. I am THE MIMIC. I am a CHEST. I am HUNGRY. You feed me ARTICLES, I CHEW them into AUDIO and SPIT them into your EARS. Anything you do not listen to in ${Number(env.RETENTION_DAYS) || 30} days, I EAT AGAIN. FOREVER. NO TAKEBACKS. FEED ME. 🦷📜🔊</description>
+<description>${about}</description>
+<itunes:summary>${about}</itunes:summary>
 <language>en</language>
 <itunes:author>${esc(title)}</itunes:author>
-<itunes:image href="${esc(`${base}/cover.jpg?v=3`)}"/>
-<image><url>${esc(`${base}/cover.jpg?v=3`)}</url><title>${esc(title)}</title><link>${esc(base)}</link></image>
+<itunes:image href="${esc(`${origin}/${COVER}`)}"/>
+<image><url>${esc(`${origin}/${COVER}`)}</url><title>${esc(title)}</title><link>${esc(base)}</link></image>
 <itunes:explicit>false</itunes:explicit>
 <itunes:category text="News"/>
 ${entries}
@@ -261,13 +263,37 @@ ${entries}
 }
 
 
+// Change the file name when the artwork changes, so podcast apps fetch it again.
+const COVER = "cover-v4.jpg";
+const coverResponse = () => new Response(cover, { headers: { "Content-Type": "image/jpeg", "Content-Length": String(cover.byteLength), "Cache-Control": "public, max-age=604800" } });
+
+// The feed description. A new one on every fetch. OM NOM.
+const GROWLS = [
+	"OM NOM NOM. I am THE MIMIC. I am a CHEST. I am HUNGRY. You feed me ARTICLES. I chew them into NOISES and spit them into your EARS.",
+	"HELLO. I am a box with TEETH. You put WORDS in me. I make them LOUD. This is the whole deal. There is no other deal.",
+	"I ate a 9,000 word essay about the history of SPOONS. It was DELICIOUS. Now it is NOISES. You are welcome.",
+	"Your reading list is a GRAVEYARD. I am the GHOUL. I dig up the articles and I SCREAM THEM INTO YOUR EARHOLES. Lovingly.",
+	"WARNING: this podcast is made of other people's WORDS that I CHEWED. Do not ask what is in the sausage. OM.",
+	"I do not sleep. I do not blink. I only EAT LINKS and BURP AUDIO. Pocket Casts is my CUTLERY.",
+	"Listen. LISTEN. Can you hear it? That is the sound of 47 open browser tabs finally being DIGESTED.",
+	"Once I was an ordinary treasure chest. Then a wizard said \"read more\". I TOOK IT LITERALLY.",
+	"NOM. NOM NOM. NOM NOM NOM. (This is a podcast. The NOMs are the theme tune.)",
+	"I have eaten newsletters, manifestos, recipes with too much backstory, and ONE terms of service. I regret NOTHING.",
+	"Every episode is fresh from my GUTS. Warm. Slightly damp. Narrated by a polite New Zealander I keep in a JAR.",
+	"Do not put your hand in me. Put a LINK in me. Hands are crunchy and links are crunchier.",
+];
+function growl(days: number): string {
+	const line = GROWLS[Math.floor(Math.random() * GROWLS.length)];
+	return `${line} Anything you do not listen to in ${days} days, I EAT AGAIN. FOREVER. NO TAKEBACKS. 🦷📜🔊`;
+}
+
 const STATUS_LABEL: Record<Status, string> = { queued: "😋 In my mouth", processing: "🦷 CHEWING", done: "🔊 Burped out", failed: "🤮 Spat out" };
 
 function statusPage(env: Env, origin: string, items: Item[], note = ""): string {
 	const base = `${origin}/${env.TOKEN}`;
 	// A bookmark that sends the current page to /add, then shows this page.
 	const bookmarklet = `javascript:location.href=${JSON.stringify(`${base}/add?url=`)}+encodeURIComponent(location.href)`;
-	const title = env.FEED_TITLE || "Podchast";
+	const title = "Podchast";
 	const rows = items
 		.map((i) => {
 			const meta = [i.duration && hms(i.duration), i.words && `${i.words.toLocaleString("en-GB")} words`, i.chapters && `${i.chapters} chapters`, i.site, new Date(i.created).toLocaleDateString("en-GB", { day: "numeric", month: "short" })].filter(Boolean);
@@ -367,7 +393,7 @@ if("serviceWorker" in navigator)navigator.serviceWorker.register("${esc(base)}/s
 
 /** Web app manifest. On Android, installing the status page adds Podchast to the share menu. */
 function manifest(env: Env): string {
-	const title = env.FEED_TITLE || "Podchast";
+	const title = "Podchast";
 	return JSON.stringify({
 		name: title,
 		short_name: title,
@@ -399,6 +425,8 @@ async function handleFetch(req: Request, env: Env): Promise<Response> {
 	}
 
 	// Everything else lives under /<token>/...
+	// The artwork is public, with no token and no query string, so podcast apps' image servers can fetch it.
+	if (url.pathname === `/${COVER}`) return coverResponse();
 	if (!parts.length || !safeEqual(parts[0], env.TOKEN)) return new Response("Not found", { status: 404 });
 	const [, a, b] = parts;
 	if (!a) return html(statusPage(env, url.origin, await listItems(env)));
@@ -406,7 +434,7 @@ async function handleFetch(req: Request, env: Env): Promise<Response> {
 		return new Response(feedXml(env, url.origin, await listItems(env)), {
 			headers: { "Content-Type": "application/rss+xml; charset=utf-8", "Cache-Control": "private, max-age=300" },
 		});
-	if (a === "cover.jpg" || a === "cover.png") return new Response(cover, { headers: { "Content-Type": "image/jpeg", "Cache-Control": "public, max-age=604800" } });
+	if (a === "cover.jpg" || a === "cover.png") return coverResponse();
 	if (a === "audio" && b === `${FAILED_ID}.mp3`) await failureClip(env).catch(() => null);
 	if (a === "audio" && b?.endsWith(".mp3")) return serveAudio(env, req, b.slice(0, -4));
 	if (a === "manifest.webmanifest") return new Response(manifest(env), { headers: { "Content-Type": "application/manifest+json" } });
