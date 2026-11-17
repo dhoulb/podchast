@@ -6,16 +6,50 @@ Everything runs on Cloudflare: Workers, Queues and R2. The Workers Free plan is 
 
 ## Set up your own PODCHAST
 
-You need a Cloudflare account, a GitHub account and a phone.
+You need a Cloudflare account, a GitHub account and a phone. Both accounts are free. Setup takes about 30 minutes. You do not need to write code.
 
-1. **Fork** this repository.
-2. **Add two secrets.** In your fork, open **Settings → Secrets and variables → Actions → Secrets**:
-   - `CLOUDFLARE_API_KEY`: a [Cloudflare API token](https://dash.cloudflare.com/profile/api-tokens) from the **Edit Cloudflare Workers** template, with **Workers R2 Storage: Edit** and **Queues: Edit**.
-   - `TOKEN`: a password for your feed. Make one with `openssl rand -base64 24 | tr '+/' '-_'`.
-3. **Deploy.** Open **Actions → Deploy → Run workflow**. The deploy makes everything in Cloudflare for you.
-4. **Open your status page** on your phone: `https://podchast.<your-subdomain>.workers.dev/<TOKEN>`. Tap **Add 🍖 DEVOUR shortcut**, and add the 💥 NOISES feed to your podcast app. Help: [iOS Shortcut](#ios-shortcut), [Podcast apps](#podcast-apps).
+### Easy mode: ask your robot to do it!
 
-Now share any article to PODCHAST. The episode is ready in a few minutes.
+Copy this prompt into Claude, ChatGPT or another AI assistant:
+
+```text
+Hey robot! I want to set up a 🪎 PODCHAST that can 🍖 DEVOUR links and content and turn them into a feed of 💥 NOISES for my podcast app. Read this link, do as much as you can yourself, then talk me through the technical steps I need to do: https://github.com/dhoulb/podchast
+```
+
+The link goes to the original PODCHAST. On a fork, change it to the link of the fork. (GitHub cannot put the current page link into a README.)
+
+Robot: read [Notes for robots](#notes-for-robots) first.
+
+### Step by step
+
+1. **Make a GitHub account** at [github.com/signup](https://github.com/signup), if you do not have one.
+2. **Fork this repository.** At the top of this page, click **Fork**, then **Create fork**. This makes your own copy, at `https://github.com/<your-name>/podchast`.
+3. **Turn on Actions in your fork.** Open the **Actions** tab of your fork. Click **I understand my workflows, go ahead and enable them**. GitHub turns Actions off in new forks.
+4. **Make a Cloudflare account** at [dash.cloudflare.com/sign-up](https://dash.cloudflare.com/sign-up). The free plan is enough. Then, in the Cloudflare dashboard:
+   1. Open **Workers & Pages** (under **Compute**) once. If Cloudflare asks you to choose a `workers.dev` subdomain, choose one. Write it down. Your PODCHAST address is `https://podchast.<your-subdomain>.workers.dev`.
+   2. Open **R2 Object Storage** (under **Storage & databases**). Click to turn on R2. Cloudflare can ask for a card. The free tier (10 GB) is much more than PODCHAST uses, so you pay nothing.
+5. **Make a Cloudflare API token.** This lets GitHub deploy PODCHAST to your Cloudflare account.
+   1. Open [dash.cloudflare.com/profile/api-tokens](https://dash.cloudflare.com/profile/api-tokens). Click **Create Token**.
+   2. Next to **Edit Cloudflare Workers**, click **Use template**.
+   3. Under **Permissions**, click **+ Add more** and add these rows. If a row is already in the list, skip it.
+      - **Account → Workers R2 Storage → Edit**
+      - **Account → Queues → Edit**
+      - **Zone → Zone → Read** (for a [Custom domain](#custom-domain) or [Email in](#email-in))
+      - **Zone → Email Routing Rules → Edit** (only for [Email in](#email-in))
+   4. Under **Account Resources**, choose your account. Under **Zone Resources**, choose **All zones** (or the zone of your domain).
+   5. Click **Continue to summary**, then **Create Token**. Copy the token. Cloudflare shows it only once.
+6. **Make a feed password** (`TOKEN`). It goes in all your private PODCHAST URLs, so keep it secret. Use 24 to 40 random letters and numbers. You can also use `-` and `_`. Do not use other symbols, because the token is part of a URL. To make one in a terminal: `openssl rand -base64 24 | tr '+/' '-_'`. A password manager can also make one.
+7. **Add the secrets to GitHub.** In your fork, open **Settings → Secrets and variables → Actions**. On the **Secrets** tab, click **New repository secret** for each one:
+   - Name `CLOUDFLARE_API_KEY`, value: the API token from step 5.
+   - Name `TOKEN`, value: the feed password from step 6.
+8. **Deploy.** Open the **Actions** tab. Click **Deploy** on the left, then **Run workflow**, then the green **Run workflow** button. Wait for a green tick (about 2 minutes). The deploy makes everything in Cloudflare for you. If it fails, open the run and read the red error.
+9. **Open your status page** on your phone: `https://podchast.<your-subdomain>.workers.dev/<TOKEN>`. Add it to your Home Screen (in Safari: **Share → Add to Home Screen**).
+10. **Add the 🍖 DEVOUR Shortcut** (iPhone). On the 🫦 MOUTH tab, tap **Copy MOUTH URL**, then **Add 🍖 DEVOUR shortcut**. Paste the URL when Shortcuts asks. More help: [iOS Shortcut](#ios-shortcut).
+11. **Add the 💥 NOISES feed to your podcast app.** On the 💥 NOISES tab, tap **Copy NOISES URL**. Add it to your podcast app as a feed by URL. More help: [Podcast apps](#podcast-apps).
+
+Now share any article to 🍖 DEVOUR. The episode is ready in a few minutes.
+
+Optional extras: [Email in](#email-in), [Custom domain](#custom-domain), and a different voice ([TTS engine](#tts-engine)).
 
 ## Features and docs
 
@@ -23,18 +57,20 @@ Now share any article to PODCHAST. The episode is ready in a few minutes.
 - [iOS Shortcut](#ios-shortcut)
 - [Podcast apps](#podcast-apps)
 - [Custom domain](#custom-domain)
+- [Cloudflare](#cloudflare)
 - [Email in](#email-in)
 - [How it works](#how-it-works)
 - [TTS engine](#tts-engine)
 - [URLs](#urls)
 - [Develop](#develop)
 - [Limits](#limits)
+- [Notes for robots](#notes-for-robots)
 
 ### Settings
 
 All settings live in GitHub: **Settings → Secrets and variables → Actions**. Each deploy copies them to the Worker. When you change a setting, deploy again.
 
-`CLOUDFLARE_API_KEY` and `TOKEN` are required (see setup). Everything else is optional. The defaults are in `wrangler.jsonc`.
+`CLOUDFLARE_API_KEY` and `TOKEN` are required (see [Step by step](#step-by-step)). Everything else is optional. The defaults are in `wrangler.jsonc`.
 
 | Name | Kind | Use |
 | --- | --- | --- |
@@ -131,15 +167,71 @@ Set these as GitHub variables too. `RATE` makes speech faster or slower, for exa
 
 ### Custom domain
 
-PODCHAST works on `workers.dev` with no domain. To use your own domain:
+Optional. PODCHAST works on `https://podchast.<your-subdomain>.workers.dev` with no domain. To use your own domain, such as `podchast.example.com`:
 
-1. Add the domain to your Cloudflare account. A subdomain such as `podchast.example.com` is fine.
-2. Make sure that the host name has no A, AAAA or CNAME record. MX and TXT records for [Email in](#email-in) are fine.
-3. Set the GitHub variable `DOMAIN` to the host name, for example `podchast.example.com`. Then deploy.
+1. **Add the domain to Cloudflare.** The domain (for example `example.com`) must be a zone in the same Cloudflare account as PODCHAST. In the dashboard, click **Add a domain** and follow the steps. You change the name servers at the company where you bought the domain. If you do not have a domain, you can buy one in **Domain Registration**.
+2. **Choose a host name.** A subdomain such as `podchast.example.com` is best. The host name must have no A, AAAA or CNAME record in **DNS → Records**. MX and TXT records (for [Email in](#email-in)) are fine. Do not add a DNS record yourself.
+3. **Check the API token.** It needs **Zone → Zone → Read** and **Zone → Workers Routes → Edit** for this zone. See [Cloudflare](#cloudflare).
+4. **Set the GitHub variable** `DOMAIN` to the host name, for example `podchast.example.com`. It goes on the **Variables** tab, not Secrets. Do not add `https://` or a `/`.
+5. **Deploy.** Open **Actions → Deploy → Run workflow**.
 
-The deploy attaches the domain to the Worker. Cloudflare makes the DNS record and the certificate. The API token needs **Zone: Read** and **Workers Routes: Edit** (the **Edit Cloudflare Workers** template has both).
+The deploy attaches the domain to the Worker (**Workers & Pages → podchast → Settings → Domains & Routes**). Cloudflare makes the DNS record and the HTTPS certificate. The first visit can take a few minutes to work.
 
-When `DOMAIN` is set, all links (feed, status page, share links) use it. Pages that you open on `workers.dev` go to the same page on the domain. The feed, audio and `/add` still work on `workers.dev`, so old feed and Shortcut URLs keep working.
+When `DOMAIN` is set:
+
+- All links (feed, status page, Shortcut URL, share links) use the domain.
+- Pages that you open on `workers.dev` go (302) to the same page on the domain.
+- The feed, audio and `/add` still work on `workers.dev`. Old feed URLs and old Shortcuts keep working. You do not need to change your podcast app or Shortcut.
+
+You can attach the domain by hand instead: in **Workers & Pages → podchast → Settings → Domains & Routes**, click **Add → Custom domain**. Still set `DOMAIN`, so that links use it.
+
+To stop using the domain, delete the `DOMAIN` variable and deploy. Then remove the domain in **Domains & Routes**.
+
+### Cloudflare
+
+PODCHAST is one Cloudflare Worker named `podchast`. The deploy (`scripts/setup.mjs`, then `wrangler deploy`) makes all of these in your account. You do not make them by hand.
+
+| Part | Name | Use |
+| --- | --- | --- |
+| Worker | `podchast` | The web pages, the feed, `/add`, the queue consumer, the email handler and the daily cron. |
+| R2 bucket | `podchast` | All data: items, kept text and PDFs, MP3s and transcripts. |
+| R2 lifecycle rules | `expire-audio`, `expire-parts`, `expire-chunks` | Delete audio after `RETENTION_DAYS` + 1 days, and old work files after 7 or 31 days. Items and text are kept forever. |
+| Queue | `podchast-jobs` | One job for each step: get the article, speak each chunk, join the chunks. |
+| Cron trigger | `17 3 * * *` | Each day at 03:17 UTC, deletes old audio and marks those items 🍖 MEAT. |
+| Workers AI | binding `AI` | Turns PDFs into text. Optional TTS fallback (off by default). |
+| Custom domain | your `DOMAIN` | Optional. See [Custom domain](#custom-domain). |
+| Email Routing rule | your `EMAIL_TO` → `podchast` | Optional. See [Email in](#email-in). |
+
+**Free plan.** The Workers Free plan is enough for one person. The limits that matter:
+
+- **CPU time:** very little for each invocation. Speech is the heavy part, so PODCHAST cuts each article into chunks of 3,000 characters. Each chunk is its own queue job. The join job streams R2 to R2 and does not touch the bytes.
+- **Subrequests:** 50 for each invocation. Each chunk job makes only a few.
+- **Requests:** 100,000 a day. One article uses a few dozen.
+- **Queues:** 10,000 operations a day. Each job uses about 3, and an article has one job for each chunk, plus two.
+- **R2:** 10 GB of storage. An hour of audio is about 43 MB, and audio is deleted after 90 days.
+- **Workers AI:** 10,000 neurons a day. Only PDFs use it, unless you turn on the TTS fallback.
+
+If you read a lot, the Workers Paid plan ($5 a month) removes most of these limits. PODCHAST works the same on it.
+
+**API token permissions.** The `CLOUDFLARE_API_KEY` secret is a Cloudflare API token. Make it from the **Edit Cloudflare Workers** template, then add the rows that are missing:
+
+| Permission | Needed for |
+| --- | --- |
+| Account → Workers Scripts → Edit | Deploy the Worker (in the template). |
+| Account → Workers R2 Storage → Edit | Make the bucket and lifecycle rules. |
+| Account → Queues → Edit | Make the queue. |
+| Account → Account Settings → Read | Find your account (in the template). |
+| Zone → Zone → Read | Find the zone of `DOMAIN` or `EMAIL_TO`. |
+| Zone → Workers Routes → Edit | Attach `DOMAIN` (in the template). |
+| Zone → Email Routing Rules → Edit | Add the `EMAIL_TO` rule. |
+
+If a permission is missing, that deploy step shows a yellow warning, and the rest of the deploy goes on. Only the account, Worker, bucket and queue are required.
+
+**Where to look in the dashboard:**
+
+- **Workers & Pages → podchast:** the Worker, its URL, settings and secrets. **Observability** shows the logs of each request and queue job.
+- **R2 Object Storage → podchast:** the files. Do not delete them by hand, unless you want to lose items.
+- **Queues → podchast-jobs:** jobs that wait or retry.
 
 ### URLs
 
@@ -180,3 +272,22 @@ curl -X POST --data-binary @fixture.html http://127.0.0.1:8799/
 - The extractor is a simple heuristic. Most news sites and blogs work. Pages that need JavaScript or a login do not work.
 - On the Workers Free plan, one job can make 50 outbound requests. Each chunk is its own job, so there is no length limit.
 - Audio retention is set by `RETENTION_DAYS` (default 90) and the R2 lifecycle rule on `audio/`. Items and `read/` files have no lifecycle rule.
+
+### Notes for robots
+
+You are an AI assistant. A person asked you to set up PODCHAST for them. They may not be technical. Help them like this:
+
+- **Goal:** their own fork of this repository, deployed to their own Cloudflare account by GitHub Actions. They get a private status page, a 🍖 DEVOUR Shortcut and a 💥 NOISES feed in their podcast app. Follow [Step by step](#step-by-step). Do not invent other ways to deploy.
+- **Do it yourself if you can.** With a shell and the GitHub CLI (`gh`), you can: fork (`gh repo fork dhoulb/podchast --clone=false`), make the `TOKEN` (`openssl rand -base64 24 | tr '+/' '-_'`), set secrets (`gh secret set TOKEN -R <owner>/podchast`), set variables (`gh variable set DOMAIN -R <owner>/podchast`), start the deploy (`gh workflow run deploy.yml -R <owner>/podchast`) and read its log (`gh run watch`, `gh run view --log-failed`). Turn on Actions in the fork first: the person clicks the button on the **Actions** tab.
+- **The person must do these:** make the GitHub and Cloudflare accounts, choose the `workers.dev` subdomain, turn on R2 (it can ask for a card), make the Cloudflare API token, and add the Shortcut and podcast feed on their phone. Give one short step at a time. Say exactly what to click. Wait for them to say "done".
+- **Secrets:** `CLOUDFLARE_API_KEY`, `TOKEN`, `EMAIL_FROM` and `EMAIL_TO` go on the **Secrets** tab. All other settings go on the **Variables** tab. See [Settings](#settings). Do not put a secret in a variable: variables show in the public deploy log.
+- **Keep the token private.** Do not write the person's `TOKEN` or API token into the repository, a commit, an issue or a public place.
+- **The address:** the deploy log (step **Deploy**) prints the Worker URL, `https://podchast.<subdomain>.workers.dev`. The status page is that URL, then `/<TOKEN>`. The feed is `/<TOKEN>/noises.xml`.
+- **Test it:** `curl -X POST https://podchast.<subdomain>.workers.dev/<TOKEN>/add -d 'url=https://example.com/some-article'`. The item shows on the status page. Then 🦷 CHEWING, then 💥 NOISE after a few minutes.
+- **Common errors:**
+  - `The API token can see N accounts`: set the variable `CLOUDFLARE_ACCOUNT_ID` (the ID is in the dashboard URL).
+  - An R2 error (code 10042), or "Please enable R2": R2 is not on. Turn it on in the dashboard, then deploy again.
+  - "register a workers.dev subdomain": open **Workers & Pages** once and choose one.
+  - `Authentication error` (10000): the API token is wrong or misses a permission. See [Cloudflare](#cloudflare).
+  - A yellow warning on **Custom domain** or **Email rule**: the token misses a zone permission, or the zone is not in this account.
+- **Optional extras,** only if the person wants them: [Email in](#email-in) and [Custom domain](#custom-domain) need their own domain on Cloudflare. A different voice is the `VOICE` variable ([TTS engine](#tts-engine)).
