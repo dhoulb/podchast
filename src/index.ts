@@ -298,7 +298,7 @@ function feedXml(env: Env, origin: string, items: Item[], file = FEED): string {
 						facts.length && `<p>${esc(facts.join(" · "))}</p>`,
 					].filter(Boolean);
 			const plain = failed ? `BLEURGH! I could not eat this article. Stuck in my teeth: ${i.error ?? "a mystery bone"}. ${i.url}`.trim() : [i.excerpt, i.byline && `By ${i.byline}.`, i.url && `Source: ${i.url}`, facts.join(" · ")].filter(Boolean).join("\n\n");
-			const audio = failed ? `${base}/audio/${FAILED_ID}.mp3?for=${i.id}` : `${base}/audio/${i.id}.mp3${i.aired ? `?v=${Date.parse(i.aired)}` : ""}`;
+			const audio = failed ? `${base}/audio/${FAILED_ID}.mp3?for=${i.id}` : `${base}/audio/${i.id}.mp3${i.aired ? `?g=${Date.parse(i.aired)}` : ""}`; // Apps may match episodes by enclosure URL too, so it changes with the GUID.
 			// New audio gets a new GUID. Podcast apps match episodes by GUID, so an old GUID keeps
 			// the old episode's state (archived, played, deleted) and hides the new audio.
 			const guid = failed ? `${i.id}-spat` : i.aired ? `${i.id}-${Date.parse(i.aired)}` : i.id;
