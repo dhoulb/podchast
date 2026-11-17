@@ -663,8 +663,12 @@ if(!RM)below.forEach(function(b){var d=b[1]-b[0].getBoundingClientRect().top;if(
 function badge(){var n=document.querySelectorAll('#list>li:not([data-bye])[data-s=chewing],#list>li:not([data-bye])[data-s=waiting]').length,b=document.getElementById("busy");if(b){b.textContent=n;b.hidden=!n}}
 // Live refresh: get the page again and swap in only the cards that changed.
 var HOME=${json(`${base}/`)},busy=null,last=Date.now(),gone={};
+function sig(doc){return [].map.call(doc.querySelectorAll("style,script"),function(e){return e.textContent}).join("")}
 function refresh(){if(busy)return busy;busy=fetch(HOME,{cache:"no-store"}).then(function(r){if(!r.ok)throw new Error("HTTP "+r.status);return r.text()}).then(function(t){
-var d=new DOMParser().parseFromString(t,"text/html"),ul=document.getElementById("list"),nu=d.getElementById("list"),ns=d.getElementById("sum"),os=document.getElementById("sum");if(!ul||!nu)return;
+var d=new DOMParser().parseFromString(t,"text/html");
+// After a deploy, the new cards need the new CSS and JS. Live refresh only swaps cards, so load the whole page again.
+if(sig(d)!==sig(document)){location.reload();return}
+var ul=document.getElementById("list"),nu=d.getElementById("list"),ns=d.getElementById("sum"),os=document.getElementById("sum");if(!ul||!nu)return;
 var anchor=null,top=0;if(scrollY>0)[].some.call(ul.children,function(c){var b=c.getBoundingClientRect();if(!c.dataset.bye&&b.bottom>0){anchor=c.dataset.k;top=b.top;return true}});
 if(os&&ns&&os.innerHTML!==ns.innerHTML)os.innerHTML=ns.innerHTML;
 var old={},prev=null,keep={};[].forEach.call(nu.children,function(n){keep[n.dataset.k]=1});[].forEach.call(ul.children,function(c){if(c.dataset.bye)return;if(keep[c.dataset.k])old[c.dataset.k]=c;else chomp(c)});
