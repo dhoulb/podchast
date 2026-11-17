@@ -25,8 +25,8 @@ export function escapeXml(s: string): string {
 const unescapeXml = (s: string) => s.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, "&");
 
 // format: an Edge output format, e.g. "audio-24khz-48kbitrate-mono-mp3".
-// pause: milliseconds of silence between paragraphs (blank lines). 0 means none.
-export type EdgeOptions = { voice: string; rate?: string; pitch?: string; volume?: string; format?: string; pause?: number };
+// Edge refuses SSML <break> ("SSML is invalid"), so pauses are made in tts.ts with silent MP3 frames.
+export type EdgeOptions = { voice: string; rate?: string; pitch?: string; volume?: string; format?: string };
 export const EDGE_DEFAULT_FORMAT = "audio-24khz-48kbitrate-mono-mp3";
 
 /** One spoken sentence. Times are in seconds from the start of the audio. */
@@ -116,7 +116,7 @@ export async function edgeSynthesise(text: string, opts: EdgeOptions, idleMs = 3
 	const ssml =
 		`<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='en-US'>` +
 		`<voice name='${opts.voice}'><prosody pitch='${opts.pitch ?? "+0Hz"}' rate='${opts.rate ?? "+0%"}' volume='${opts.volume ?? "+0%"}'>` +
-		`${speechText(text, opts.pause)}</prosody></voice></speak>`;
+		`${escapeXml(text)}</prosody></voice></speak>`;
 	ws.send(
 		`X-RequestId:${uuid()}\r\nContent-Type:application/ssml+xml\r\nX-Timestamp:${dateString()}Z\r\nPath:ssml\r\n\r\n${ssml}`,
 	);
@@ -138,12 +138,6 @@ function readCues(message: string): Cue[] {
 	} catch {
 		return [];
 	}
-}
-
-/** Escape the text, and put a short silence between paragraphs. */
-function speechText(text: string, pause = 0): string {
-	const safe = escapeXml(text);
-	return pause > 0 ? safe.replace(/\n\s*\n/g, ` <break time='${Math.min(pause, 3000)}ms'/> `) : safe;
 }
 
 const decoder = new TextDecoder();

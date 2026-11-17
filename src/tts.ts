@@ -38,7 +38,7 @@ export function isPermanent(e: unknown): boolean {
 export type Spoken = { chunks: string[]; audio: Pieces[]; cues?: Cue[][] };
 
 /** Edge options from the env vars. */
-const edgeOptions = (env: TtsEnv) => ({ voice: env.VOICE, rate: env.RATE, pitch: env.PITCH, volume: env.VOLUME, format: env.EDGE_FORMAT, pause: Number(env.EDGE_PAUSE_MS) || 0 });
+const edgeOptions = (env: TtsEnv) => ({ voice: env.VOICE, rate: env.RATE, pitch: env.PITCH, volume: env.VOLUME, format: env.EDGE_FORMAT });
 
 async function edgeAll(env: TtsEnv, text: string): Promise<Spoken> {
 	// Edge speaks at about 2 to 3 times real time per connection, so run a few parts at once.
@@ -50,7 +50,7 @@ async function edgeAll(env: TtsEnv, text: string): Promise<Spoken> {
 		while (next < chunks.length) {
 			const i = next++;
 			const t = Date.now();
-			const out = await retry(() => edgeSynthesise(chunks[i], edgeOptions(env)), 3);
+			const out = await edgeChunk(env, chunks[i]);
 			parts[i] = out.audio;
 			cues[i] = out.cues;
 			console.log(`Edge TTS part ${i + 1}/${chunks.length}: ${byteLength(parts[i])} bytes, ${cues[i].length} sentences in ${Date.now() - t} ms`);
@@ -60,9 +60,118 @@ async function edgeAll(env: TtsEnv, text: string): Promise<Spoken> {
 	return { chunks, audio: parts, cues };
 }
 
+// Markers in the script. Edge refuses SSML <break>, so pauses are real silent MP3 frames put between separate Edge requests.
+/** Put before a heading paragraph: a long pause before it, and a short one after it. */
+export const HEADING = "\uE000";
+/** A paragraph that is only this marker: a divider, a long pause. */
+export const DIVIDER = "\uE001";
+const MARKERS = /[\uE000\uE001]/g;
+export const stripMarkers = (s: string) => s.replace(MARKERS, "");
+
+/** Pauses in milliseconds. EDGE_PAUSE_MS sets the pause between paragraphs. */
+const HEADING_BEFORE_MS = 1500;
+const HEADING_AFTER_MS = 700;
+const DIVIDER_MS = 2000;
+// Each segment is one Edge request. Keep the subrequests of one chunk job well under the Free plan's 50.
+const MAX_SEGMENTS = 12;
+
+/** One piece of text to speak in one request, and the silence (ms) before it. */
+export type Segment = { text: string; pause: number };
+
+/** Split a chunk at paragraphs, headings and dividers. Short paragraphs are joined when there are too many. */
+export function segments(text: string, paragraphMs: number): Segment[] {
+	const out: (Segment & { para: boolean })[] = [];
+	let pause = paragraphMs;
+	for (const raw of text.split(/\n{2,}/)) {
+		const t = raw.trim();
+		if (!t) continue;
+		if (t === DIVIDER) {
+			pause = Math.max(pause, DIVIDER_MS);
+			continue;
+		}
+		if (t.startsWith(HEADING)) {
+			const h = stripMarkers(t).trim();
+			if (h) out.push({ text: h, pause: Math.max(pause, HEADING_BEFORE_MS), para: false });
+			pause = HEADING_AFTER_MS;
+			continue;
+		}
+		const clean = stripMarkers(t).trim();
+		// Edge sends no audio for text with no letters or digits, and that fails the job.
+		if (!/[\p{L}\p{N}]/u.test(clean)) continue;
+		// With no paragraph pause, join paragraphs into one request, as before.
+		const last = out.at(-1);
+		if (!paragraphMs && last?.para && pause <= paragraphMs) last.text += `\n\n${clean}`;
+		else out.push({ text: clean, pause, para: true });
+		pause = paragraphMs;
+	}
+	// Too many requests: join the shortest pair that only has a paragraph pause between them.
+	while (out.length > MAX_SEGMENTS) {
+		let best = -1;
+		for (let i = 0; i + 1 < out.length; i++) {
+			if (!out[i].para || !out[i + 1].para || out[i + 1].pause > paragraphMs) continue;
+			if (best < 0 || out[i].text.length + out[i + 1].text.length < out[best].text.length + out[best + 1].text.length) best = i;
+		}
+		if (best < 0) break;
+		out[best].text += `\n\n${out[best + 1].text}`;
+		out.splice(best + 1, 1);
+	}
+	return out.map(({ text, pause }) => ({ text, pause }));
+}
+
+/**
+ * Silent MP3 frames in the same format as `mp3` (taken from its first frame), for about `ms` milliseconds.
+ * A frame with all-zero side info and data decodes as silence. Returns undefined if the format is not known.
+ */
+export function silence(mp3: Uint8Array, ms: number): { bytes: Uint8Array; seconds: number } | undefined {
+	if (ms <= 0) return undefined;
+	for (let i = 0; i + 4 < Math.min(mp3.length, 65536); i++) {
+		if (mp3[i] !== 0xff || (mp3[i + 1] & 0xe0) !== 0xe0) continue;
+		const version = (mp3[i + 1] >> 3) & 3; // 3 = MPEG1, 2 = MPEG2, 0 = MPEG2.5
+		const layer = (mp3[i + 1] >> 1) & 3; // 1 = Layer III
+		const noCrc = mp3[i + 1] & 1;
+		const bi = mp3[i + 2] >> 4;
+		const si = (mp3[i + 2] >> 2) & 3;
+		if (version === 1 || layer !== 1 || !noCrc || bi === 0 || bi === 15 || si === 3) continue;
+		const v1 = [0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320];
+		const v2 = [0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160];
+		const kbps = (version === 3 ? v1 : v2)[bi];
+		const rate = [[11025, 12000, 8000], [], [22050, 24000, 16000], [44100, 48000, 32000]][version][si];
+		const samples = version === 3 ? 1152 : 576;
+		const len = Math.floor(((samples / 8) * kbps * 1000) / rate);
+		const frame = new Uint8Array(len);
+		frame.set(mp3.subarray(i, i + 4));
+		frame[2] &= ~0x02; // No padding byte.
+		const n = Math.max(1, Math.round(((ms / 1000) * rate) / samples));
+		const bytes = new Uint8Array(n * len);
+		for (let k = 0; k < n; k++) bytes.set(frame, k * len);
+		return { bytes, seconds: (n * samples) / rate };
+	}
+	return undefined;
+}
+
+/** Speak one chunk with Edge: one request for each segment, with silence between them. */
+async function edgeChunk(env: TtsEnv, text: string): Promise<{ audio: Pieces; cues: Cue[]; seconds: number }> {
+	const audio: Pieces = [];
+	const cues: Cue[] = [];
+	let t = 0;
+	for (const seg of segments(text, Number(env.EDGE_PAUSE_MS) || 0)) {
+		const r = await retry(() => edgeSynthesise(seg.text, edgeOptions(env)), 2);
+		const gap = silence(r.audio[0], seg.pause);
+		if (gap) {
+			audio.push(gap.bytes);
+			t += gap.seconds;
+		}
+		for (const c of r.cues) cues.push({ start: c.start + t, end: c.end + t, text: c.text });
+		audio.push(...r.audio);
+		t += piecesSeconds(r.audio);
+	}
+	if (!audio.length) throw new Error("Edge TTS: nothing to say in this chunk");
+	return { audio, cues, seconds: t };
+}
+
 async function aiAll(env: TtsEnv, text: string): Promise<Spoken> {
 	const parts: Pieces[] = [];
-	const chunks = chunkText(text, 1800);
+	const chunks = chunkText(stripMarkers(text), 1800);
 	for (const chunk of chunks) {
 		parts.push(
 			await retry(async () => {
@@ -91,8 +200,8 @@ export async function speakChunk(env: TtsEnv, text: string): Promise<{ mp3: Uint
 	};
 	if (env.TTS_ENGINE !== "workers-ai") {
 		try {
-			const r = await retry(() => edgeSynthesise(text, edgeOptions(env)), 2);
-			return out({ chunks: [text], audio: [r.audio], cues: [r.cues] }, "edge");
+			const r = await edgeChunk(env, text);
+			return { mp3: concat(r.audio), seconds: r.seconds, cues: r.cues, engine: "edge" };
 		} catch (e) {
 			if (env.TTS_ENGINE === "edge-only") throw e;
 			const edgeError = String((e as Error)?.message ?? e);
@@ -197,7 +306,7 @@ export function chunkVtt(chunks: string[], seconds: number[], cues?: (Cue[] | un
 
 /** Split text into sentences, and share the duration between them by length. */
 function estimateCues(text: string, seconds: number): Cue[] {
-	const sentences = (text.match(/[^.!?\n]+[.!?]+["'\u201d\u2019)]*|[^.!?\n]+/g) ?? []).map((s) => s.trim()).filter(Boolean);
+	const sentences = (stripMarkers(text).match(/[^.!?\n]+[.!?]+["'\u201d\u2019)]*|[^.!?\n]+/g) ?? []).map((s) => s.trim()).filter(Boolean);
 	const total = sentences.reduce((n, s) => n + s.length, 0) || 1;
 	let t = 0;
 	return sentences.map((s) => {
