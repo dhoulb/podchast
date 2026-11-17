@@ -9,7 +9,7 @@ import { type Article, chunkText, fetchArticle } from "./extract";
 import { readMail } from "./mail";
 import { concat } from "./edge-tts";
 import { type Chapter, id3Tag } from "./id3";
-import { CHUNK_CHARS, chunkTimes, chunkVtt, isPermanent, mp3Duration, speak, speakChunk, type TtsEnv } from "./tts";
+import { CHUNK_CHARS, chunkTimes, chunkVtt, DIVIDER, HEADING, isPermanent, mp3Duration, speak, speakChunk, type TtsEnv } from "./tts";
 import type { Cue } from "./edge-tts";
 
 export interface Env extends TtsEnv {
@@ -29,7 +29,7 @@ export interface Env extends TtsEnv {
 // An item's audio is made in three steps. A job with only `id` reads the article and plans the chunks.
 // A job with `chunk` speaks one chunk. A job with `join` puts the chunks together into one episode.
 // `run` names one try of the whole item, so jobs from an older try do nothing.
-type Job = { id: string; run?: string; chunk?: number; join?: boolean; debug?: "edge" | "workers-ai" | "extract"; url?: string; force?: boolean; text?: string; format?: string; pause?: number; voice?: string; rate?: string; pitch?: string };
+type Job = { id: string; run?: string; chunk?: number; join?: boolean; debug?: "edge" | "workers-ai" | "extract"; url?: string; force?: boolean; text?: string; format?: string; pause?: number; voice?: string; rate?: string; pitch?: string; volume?: string };
 
 type Status = "queued" | "processing" | "done" | "failed";
 type Item = {
@@ -1000,7 +1000,7 @@ async function debugJob(env: Env, job: Job): Promise<void> {
 	const engine = job.debug as "edge" | "workers-ai";
 	const name = /^[\w-]{1,40}$/.test(job.id) ? job.id : engine;
 	const start = Date.now();
-	const report: Record<string, unknown> = { engine, voice: job.voice, rate: job.rate, pitch: job.pitch, format: job.format, pause: job.pause, at: new Date().toISOString() };
+	const report: Record<string, unknown> = { engine, voice: job.voice, rate: job.rate, pitch: job.pitch, volume: job.volume, format: job.format, pause: job.pause, at: new Date().toISOString() };
 	try {
 		const tts = { ...env, TTS_ENGINE: engine === "edge" ? "edge-only" : "workers-ai" };
 		if (job.format) tts.EDGE_FORMAT = job.format;
@@ -1009,7 +1009,10 @@ async function debugJob(env: Env, job: Job): Promise<void> {
 		// Prosody values, such as "-5%" or "-2Hz".
 		if (job.rate && /^[+-]\d{1,2}%$/.test(job.rate)) tts.RATE = job.rate;
 		if (job.pitch && /^[+-]\d{1,2}(%|Hz)$/.test(job.pitch)) tts.PITCH = job.pitch;
-		const { mp3, engine: used } = await speak(tts, job.text || "Hello. This is a test of Podchast, running on Cloudflare.");
+		if (job.volume && /^[+-]\d{1,3}%$/.test(job.volume)) tts.VOLUME = job.volume;
+		// Debug text is read like kept markdown, so headings and dividers get their pauses.
+		const md = job.text ? markdownToSpeech(job.text) : undefined;
+		const { mp3, engine: used } = await speak(tts, md ? markHeadings(md.text, md.headings) : "Hello. This is a test of Podchast, running on Cloudflare.");
 		await env.AUDIO.put(`debug/${name}.mp3`, mp3, { httpMetadata: { contentType: "audio/mpeg" } });
 		// The first MP3 frame header: bytes 1 and 2 hold the bitrate and sample rate.
 		const at = mp3.findIndex((b, i) => b === 0xff && (mp3[i + 1] & 0xe0) === 0xe0);
@@ -1101,9 +1104,10 @@ async function prepareJob(env: Env, job: Job, attempt: number): Promise<void> {
 		const partNote = item.parts ? ` Part ${item.part} of ${item.parts}.` : "";
 		const intro = [item.title?.replace(/[.!?]?$/, "."), item.byline && `By ${item.byline}.`, item.site && `From ${item.site}.`].filter(Boolean).join(" ") + partNote;
 		const outro = item.parts && item.part !== item.parts ? `End of part ${item.part}. Part ${(item.part ?? 1) + 1} follows.` : "End of article.";
-		const script = `${intro}\n\n${text}\n\n${outro}`;
+		// Markers tell the chunk job where to put longer pauses: after the intro, before each heading, at dividers and before the outro.
+		const script = `${intro}\n\n${DIVIDER}\n\n${markHeadings(text, headings)}\n\n${DIVIDER}\n\n${outro}`;
 		item.chars = script.length;
-		item.words = text.split(/\s+/).filter(Boolean).length;
+		item.words = text.split(/\s+/).filter((w) => w && w !== DIVIDER).length;
 		const chunks = chunkText(script, CHUNK_CHARS);
 		const run = crypto.randomUUID().slice(0, 8);
 		const plan: Plan = { chunks, headings, again };
@@ -1144,6 +1148,15 @@ async function chunkJob(env: Env, job: Job, attempt: number): Promise<void> {
 		return;
 	}
 	if ((await countChunks(env, dir)) >= plan.chunks.length) await env.JOBS.send({ id: item.id, run: job.run, join: true });
+}
+
+/** Put the HEADING marker before each heading paragraph, so the chunk job pauses around it. */
+function markHeadings(text: string, headings: string[]): string {
+	const isHeading = new Set(headings);
+	return text
+		.split(/\n{2,}/)
+		.map((p) => (isHeading.has(p) ? HEADING + p : p))
+		.join("\n\n");
 }
 
 /** How many chunks in a try are done. */
@@ -1341,7 +1354,13 @@ function markdownToSpeech(md: string): { text: string; headings: string[]; h1?: 
 			continue;
 		}
 		if (fence) continue; // Code is not read aloud.
-		if (/^\s*$/.test(line) || /^\s*([-*_]\s*){3,}$/.test(line) || /^\s*\|?\s*:?-{3,}/.test(line)) {
+		if (/^\s*([-*_]\s*){3,}$/.test(line)) {
+			// A divider (---, ***) is a long pause.
+			flush();
+			if (paras.length && paras.at(-1) !== DIVIDER) paras.push(DIVIDER);
+			continue;
+		}
+		if (/^\s*$/.test(line) || /^\s*\|?\s*:?-{3,}/.test(line)) {
 			flush();
 			continue;
 		}
@@ -1371,6 +1390,7 @@ function markdownToSpeech(md: string): { text: string; headings: string[]; h1?: 
 		if (t) buf.push(t);
 	}
 	flush();
+	if (paras.at(-1) === DIVIDER) paras.pop();
 	return { text: paras.join("\n\n"), headings, h1 };
 }
 

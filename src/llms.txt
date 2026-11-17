@@ -69,7 +69,7 @@ Then say "podchast this" with a link or some text.
 3. Change the code. `npm ci`, then `npm run check` (type check). `npm run dev` runs the Worker locally.
 4. Push to `main`. GitHub Actions deploys it.
 
-Easy changes with no code: GitHub variables `VOICE` (an Edge voice, such as `en-GB-RyanNeural`), `RATE`, `PITCH`, `FEED_TITLE`, `RETENTION_DAYS`, `DOMAIN` (a custom domain). Deploy again after a change.
+Easy changes with no code: GitHub variables `VOICE` (an Edge voice, such as `en-GB-RyanNeural`), `RATE`, `PITCH`, `VOLUME`, `FEED_TITLE`, `RETENTION_DAYS`, `DOMAIN` (a custom domain). Deploy again after a change.
 
 Keep secrets out of the repository, commits, issues and logs. Variables show in the public deploy log, so personal values go on the Secrets tab.
 
