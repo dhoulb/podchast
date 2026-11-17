@@ -201,7 +201,7 @@ async function addItem(env: Env, add: AddRequest): Promise<{ item: Item; same?: 
 		const item = old && (await loadItem(env, old.id));
 		if (item) {
 			const v = view(item);
-			if (v.state === "chewing" || v.state === "waiting") return { item, same: "Already in my 🕳️ ABYSS. I am still chewing it." };
+			if (v.state === "chewing" || v.state === "waiting") return { item, same: "Already in my 🕳️ ABYSS. I am still 🦷 CHEWING it." };
 			if (v.state === "done") return { item, same: "Already in my 🕳️ ABYSS. It is in your feed." };
 			return { item: await rechomp(env, item), same: "Already in my 🕳️ ABYSS. Chewing it again." };
 		}
@@ -415,16 +415,16 @@ const LABEL: Record<View["state"], [string, string]> = {
 	failed: ["🤮", "YUCK"],
 };
 
-/** Count chips for the top of the ABYSS, such as "1 chewing", "2 stuck", "4 done". */
+/** Count chips for the top of the ABYSS, such as "1 CHEWING", "2 STUCK", "4 NOISES". */
 function summary(views: View[]): string {
 	const count = (s: View["state"]) => views.filter((v) => v.state === s).length;
 	const parts: [View["state"], string][] = [
-		["chewing", "chewing"],
-		["waiting", "waiting"],
-		["stuck", "stuck"],
-		["failed", "given up"],
-		["done", "done"],
-		["meat", "meat"],
+		["chewing", "CHEWING"],
+		["waiting", "WAITING"],
+		["stuck", "STUCK"],
+		["failed", "YUCK"],
+		["done", "NOISES"],
+		["meat", "MEAT"],
 	];
 	return parts
 		.map(([s, w]) => [count(s), s, w] as const)
@@ -585,7 +585,7 @@ ul#list{list-style:none;padding:0;margin:0}
 <nav class="tabs" role="tablist"><i class="ind"></i><a href="#mouth" role="tab"><span class="em">🫦</span><span>MOUTH</span></a><a href="#abyss" role="tab"><span class="em">🕳️</span><span>ABYSS</span><b class="badge" id="busy"${busy ? "" : " hidden"}>${busy}</b></a><a href="#noises" role="tab"><span class="em">💥</span><span>NOISES</span></a></nav>
 <section id="mouth" class="tab">
 <p class="fine">Feed things into my 🫦 MOUTH. I store them in my 🕳️ ABYSS. Then you hear the 💥 NOISES. OM NOM.</p>
-<div class="panel"><h2>🍖 Add MEAT</h2><form class="add" method="post" action="${esc(base)}/add"><input type="url" name="url" placeholder="https://… (PUT A LINK IN MY MOUTH)"><button class="btn">🍖 DEVOUR</button>
+<div class="panel"><h2>Add 🍖 MEAT</h2><form class="add" method="post" action="${esc(base)}/add"><input type="url" name="url" placeholder="https://… (PUT A LINK IN MY MOUTH)"><button class="btn">🍖 DEVOUR</button>
 <details><summary>…or SHOVEL A PILE OF TEXT AT ME <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><g transform="rotate(35 12 12)" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2.5h6M12 2.5v9"/><path d="M8 12h8v4.5a4 4 0 0 1-4 4.5 4 4 0 0 1-4-4.5z" fill="currentColor"/></g></svg></summary><input type="text" name="title" placeholder="Title (optional, I will guess)"><textarea name="content" rows="8" placeholder="Paste words. Markdown is fine. ## Headings become chapters. I EAT IT ALL."></textarea><button class="btn">🍖 DEVOUR</button></details></form></div>
 <h2 class="sect">OTHER WAYS IN</h2>
 <div class="ways">
@@ -593,7 +593,7 @@ ${way("📱 iPhone and iPad", shortcut, true)}
 ${way("🌍 Browser", `<ol class="steps"><li>Show your bookmarks bar. In Chrome, press <b>⌘⇧B</b>.</li><li>DRAG the button below onto the bar.</li><li>On any article, click the bookmark. The page goes in my 🫦 MOUTH.</li></ol><div class="btns"><a class="btn drag" href="${esc(bookmarklet)}" onclick="event.preventDefault();this.textContent='DRAG ME. DO NOT POKE ME. 😤'">🍖 DEVOUR</a></div>`)}
 ${env.EMAIL_TO ? way("📧 Email", `<ol class="steps"><li>Send or forward anything to <b>${esc(env.EMAIL_TO)}</b>.</li><li>A link becomes its article. Longer text becomes an episode, and the subject is its title.</li><li>Attached PDFs become episodes too. I EAT PAPER.</li></ol><div class="btns">${copy("Copy email address 📧", env.EMAIL_TO, "btn alt")}</div>`) : ""}
 ${way("💻 Mac", `<ol class="steps"><li>The iPhone Shortcut syncs through iCloud. In Safari, use <b>Share → 🍖 DEVOUR</b>.</li><li>Want me in your Dock? In Safari, choose <b>File → Add to Dock</b>. I will sit there. Watching. Hungry.</li></ol>`)}
-${way("🤖 Android", `<ol class="steps"><li>Open this page in Chrome.</li><li>Tap <b>Add to Home screen</b>.</li><li>Share any link to <b>Podchast</b>. I pay no rent. I eat links. OM.</li></ol>`)}
+${way("🤖 Android", `<ol class="steps"><li>Open this page in Chrome.</li><li>Tap <b>Add to Home screen</b>.</li><li>Share any link to <b>PODCHAST</b>. I pay no rent. I eat links. OM.</li></ol>`)}
 </div>
 </section>
 <section id="abyss" class="tab">
@@ -765,7 +765,7 @@ function markdownToHtml(md: string): string {
 
 /** Web app manifest. On Android, installing the status page adds Podchast to the share menu. */
 function manifest(env: Env): string {
-	const title = "Podchast";
+	const title = "PODCHAST";
 	return JSON.stringify({
 		name: title,
 		short_name: title,
@@ -838,7 +838,7 @@ async function handleFetch(req: Request, env: Env): Promise<Response> {
 		const bad = addProblem(add);
 		if (bad) return new Response(bad, { status: 400, headers: { "Content-Type": "text/plain; charset=utf-8" } });
 		const { same } = await addItem(env, add);
-		return html(statusPage(env, url.origin, await withProgress(env, await listItems(env)), same ? `${same} ${add.target}` : `OM NOM NOM! In my mouth: ${add.content ? (add.title ?? "a big pile of text") : add.target} 😋 Chewing soon.`));
+		return html(statusPage(env, url.origin, await withProgress(env, await listItems(env)), same ? `${same} ${add.target}` : `OM NOM NOM! In my 🫦 MOUTH: ${add.content ? (add.title ?? "a big pile of text") : add.target} 😋 🦷 CHEWING soon.`));
 	}
 	if (a === "retry" && b) {
 		const item = await loadItem(env, b);
