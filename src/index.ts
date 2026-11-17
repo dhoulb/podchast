@@ -243,7 +243,7 @@ async function rechomp(env: Env, found: Item): Promise<Item> {
 	return item;
 }
 
-async function serveAudio(env: Env, req: Request, id: string): Promise<Response> {
+async function serveAudio(env: Env, req: Request, id: string, download?: string): Promise<Response> {
 	const obj = await env.AUDIO.get(audioKey(id), { range: req.headers, onlyIf: req.headers });
 	if (!obj) return new Response("Not found", { status: 404 });
 	const headers = new Headers({
@@ -252,6 +252,7 @@ async function serveAudio(env: Env, req: Request, id: string): Promise<Response>
 		ETag: obj.httpEtag,
 		"Cache-Control": "private, max-age=86400",
 	});
+	if (download) headers.set("Content-Disposition", `attachment; filename="${download}"`);
 	if (!("body" in obj)) return new Response(null, { status: 304, headers });
 	const r = obj.range as { offset?: number; length?: number; suffix?: number } | undefined;
 	if (r && req.headers.has("range")) {
@@ -294,6 +295,7 @@ function feedXml(env: Env, origin: string, items: Item[], file = FEED): string {
 				: [
 						i.excerpt && `<p>${esc(i.excerpt)}</p>`,
 						i.byline && `<p>By ${esc(i.byline)}.</p>`,
+						i.saved && `<p><a href="${esc(`${origin}/${i.id}`)}">Read the words</a></p>`,
 						i.url && `<p><a href="${esc(i.url)}">Read the article</a>${i.site ? ` on ${esc(i.site)}` : ""}</p>`,
 						facts.length && `<p>${esc(facts.join(" · "))}</p>`,
 					].filter(Boolean);
@@ -436,6 +438,31 @@ function summary(views: View[]): string {
 		.join("");
 }
 
+// The hero header (the Mimic image, the title and a random growl) is shared by the status page and the public pages.
+const HERO_CSS = `:root{color-scheme:dark;--bg:${BG};--bg2:#13111a;--card:#1a1722;--card-hi:#241f2e;--line:#2e2939;--text:#f4ede4;--muted:#9a90a8;--dim:#6b6378;--gold:#ffb938;--gold-d:#b87a00;--chew:#ff6b2c;--wait:#ffc94d;--noise:#4ade80;--meat:#f28a6b;--stuck:#7cc7ff;--yuck:#ff4d5e;--err:#ff7a85;--out:cubic-bezier(.2,.8,.2,1);--c:var(--muted);--top:env(safe-area-inset-top)}
+[data-s=chewing]{--c:var(--chew)}[data-s=waiting]{--c:var(--wait)}[data-s=done]{--c:var(--noise)}[data-s=meat]{--c:var(--meat)}[data-s=stuck]{--c:var(--stuck)}[data-s=failed]{--c:var(--yuck)}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html{background:var(--bg);overflow-x:hidden;overscroll-behavior-y:none;touch-action:pan-y;-webkit-text-size-adjust:100%;text-size-adjust:100%}
+body{margin:0;min-height:100vh;font:15px/1.45 system-ui,-apple-system,sans-serif;color:var(--text);background:var(--bg);padding:0 16px calc(48px + env(safe-area-inset-bottom));overflow-x:hidden;max-width:100vw}
+body::before{content:"";position:fixed;z-index:20;top:0;left:0;right:0;height:var(--top);background:var(--bg);opacity:0;pointer-events:none;transition:opacity .2s}
+.past::before{opacity:1}
+main{max-width:720px;margin:0 auto}main>*,section{min-width:0;max-width:100%}
+h1,h2,h3,.btn,.pill,.tabs a,summary{font-family:Fredoka,system-ui,sans-serif}
+a{color:var(--gold)}
+header.hero{position:relative;margin:0 -16px;max-width:none}
+header.hero img{display:block;width:100%;height:calc(50vw + var(--top));object-fit:cover;object-position:50% 20%;-webkit-mask-image:linear-gradient(#000 45%,transparent 96%);mask-image:linear-gradient(#000 45%,transparent 96%)}
+header.hero>div{position:relative;margin-top:-58px;padding:0 20px}
+h1{margin:0;font-size:36px;font-weight:700;line-height:1;color:var(--text);letter-spacing:.5px;text-shadow:0 2px 12px rgba(11,10,15,.8)}
+#growl{margin:8px 0 0;color:var(--muted);font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase}
+@media (min-width:600px){h1{font-size:44px}header.hero img{height:auto;aspect-ratio:2/1;object-position:50% 35%}}
+@media (min-width:752px){header.hero{margin:0}header.hero img{border-radius:0 0 24px 24px;-webkit-mask-image:linear-gradient(#000 45%,transparent 96%),linear-gradient(90deg,transparent,#000 10%,#000 90%,transparent);-webkit-mask-composite:source-in;mask-image:linear-gradient(#000 45%,transparent 96%),linear-gradient(90deg,transparent,#000 10%,#000 90%,transparent);mask-composite:intersect}}`;
+const heroHeader = (env: Env, title: string) =>
+	`<header class="hero"><img src="/${HERO}" alt="The Mimic chest, eating a pile of articles"><div><h1>${esc(title)}</h1><p id="growl">ARTICLES IN. NOISES OUT. NOISES FADE IN ${retentionDays(env)} DAYS. WORDS STAY FOREVER. OM NOM.</p></div></header>`;
+const HERO_JS = `// The status bar scrim shows only once the hero has scrolled away, so the Mimic's eyes stay visible at the top.
+var hero=document.querySelector(".hero");function past(){document.body.classList.toggle("past",!!hero&&hero.getBoundingClientRect().bottom<80)}addEventListener("scroll",past,{passive:true});past();
+var GROWLS=["ARTICLES IN. NOISES OUT. OM NOM.","I AM A CHEST. I AM HUNGRY. THESE FACTS ARE RELATED.","FEED ME WORDS. I SPIT OUT PODCASTS. THIS IS SCIENCE.","I ATE A PAYWALL ONCE. IT WAS CRUNCHY.","NOM NOM NOM NOM NOM NOM NOM NOM.","DO NOT PUT YOUR HAND IN ME. PUT A LINK IN ME.","I HAVE TEETH WHERE MY LID SHOULD BE. WHAT OF IT.","YOU LOOK CRUNCHY. JUST AN OBSERVATION.","I DREAM OF LONGREADS. 10,000 WORDS. MMMMM."];
+var g=document.getElementById("growl");if(g&&Math.random()<0.75)g.textContent=GROWLS[Math.floor(Math.random()*GROWLS.length)];`;
+
 function statusPage(env: Env, origin: string, items: Item[], note = ""): string {
 	const base = `${origin}/${env.TOKEN}`;
 	// A bookmark that sends the current page to /add, then shows this page.
@@ -455,8 +482,6 @@ function statusPage(env: Env, origin: string, items: Item[], note = ""): string 
 			const p = v.state === "chewing" && i.chunks && i.progress ? Math.min(1, i.progress.done / i.chunks) : undefined;
 			const teeth = v.state === "chewing" ? `<div class="teeth${p === undefined ? " any" : ""}"${p === undefined ? "" : ` style="--p:${p.toFixed(3)}"`}></div>` : "";
 			const acts = [
-				i.status === "done" && !i.gone && `<a class="chip play" href="${esc(`${base}/audio/${i.id}.mp3`)}">▶ Play</a>`,
-				i.saved && `<a class="chip" href="${esc(`${base}/read/${rootId(i.id)}`)}">Read</a>`,
 				i.url && `<a class="chip" href="${esc(i.url)}">Source</a>`,
 				i.pdf && `<a class="chip" href="${esc(`${base}/read/${rootId(i.id)}.pdf`)}">PDF</a>`,
 				v.state !== "chewing" && v.state !== "waiting" && `<form method="post" action="${esc(`${base}/retry/${i.id}`)}" data-act="retry"><button class="chip">Re-chomp</button></form>`,
@@ -464,7 +489,7 @@ function statusPage(env: Env, origin: string, items: Item[], note = ""): string 
 			].filter(Boolean);
 			return `<li class="card" data-k="${esc(i.id)}" data-s="${v.state}">
 <div class="row"><span class="pill"><span class="e">${emoji}</span>${word}</span>${v.step ? `<span class="step">${esc(v.step)}</span>` : ""}</div>
-${i.title ? `<h3>${esc(i.title)}</h3>` : `<h3 class="url">${esc(i.url || "Some text")}</h3>`}
+<h3${i.title ? "" : ' class="url"'}><a class="go" href="/${esc(i.id)}">${esc(i.title || i.url || "Some text")}</a></h3>
 ${meta.length ? `<p class="meta">${esc(meta.join(" · "))}</p>` : ""}
 ${error ? `<p class="err">${esc(error)}</p>` : ""}
 <div class="acts">${acts.join("")}</div>${teeth}
@@ -483,23 +508,7 @@ ${error ? `<p class="err">${esc(error)}</p>` : ""}
 <meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="${esc(title)}"><meta name="theme-color" content="${BG}"><meta name="color-scheme" content="dark"><script>document.documentElement.classList.add("js")</script>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&display=swap" rel="stylesheet">
 <style>
-:root{color-scheme:dark;--bg:${BG};--bg2:#13111a;--card:#1a1722;--card-hi:#241f2e;--line:#2e2939;--text:#f4ede4;--muted:#9a90a8;--dim:#6b6378;--gold:#ffb938;--gold-d:#b87a00;--chew:#ff6b2c;--wait:#ffc94d;--noise:#4ade80;--meat:#f28a6b;--stuck:#7cc7ff;--yuck:#ff4d5e;--err:#ff7a85;--out:cubic-bezier(.2,.8,.2,1);--c:var(--muted);--top:env(safe-area-inset-top)}
-[data-s=chewing]{--c:var(--chew)}[data-s=waiting]{--c:var(--wait)}[data-s=done]{--c:var(--noise)}[data-s=meat]{--c:var(--meat)}[data-s=stuck]{--c:var(--stuck)}[data-s=failed]{--c:var(--yuck)}
-*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-html{background:var(--bg);overflow-x:hidden;overscroll-behavior-y:none;touch-action:pan-y;-webkit-text-size-adjust:100%;text-size-adjust:100%}
-body{margin:0;min-height:100vh;font:15px/1.45 system-ui,-apple-system,sans-serif;color:var(--text);background:var(--bg);padding:0 16px calc(48px + env(safe-area-inset-bottom));overflow-x:hidden;max-width:100vw}
-body::before{content:"";position:fixed;z-index:20;top:0;left:0;right:0;height:var(--top);background:var(--bg);opacity:0;pointer-events:none;transition:opacity .2s}
-.past::before{opacity:1}
-main{max-width:720px;margin:0 auto}main>*,section{min-width:0;max-width:100%}
-h1,h2,h3,.btn,.pill,.tabs a,summary{font-family:Fredoka,system-ui,sans-serif}
-a{color:var(--gold)}
-header.hero{position:relative;margin:0 -16px;max-width:none}
-header.hero img{display:block;width:100%;height:calc(50vw + var(--top));object-fit:cover;object-position:50% 20%;-webkit-mask-image:linear-gradient(#000 45%,transparent 96%);mask-image:linear-gradient(#000 45%,transparent 96%)}
-header.hero>div{position:relative;margin-top:-58px;padding:0 20px}
-h1{margin:0;font-size:36px;font-weight:700;line-height:1;color:var(--text);letter-spacing:.5px;text-shadow:0 2px 12px rgba(11,10,15,.8)}
-#growl{margin:8px 0 0;color:var(--muted);font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase}
-@media (min-width:600px){h1{font-size:44px}header.hero img{height:auto;aspect-ratio:2/1;object-position:50% 35%}}
-@media (min-width:752px){header.hero{margin:0}header.hero img{border-radius:0 0 24px 24px;-webkit-mask-image:linear-gradient(#000 45%,transparent 96%),linear-gradient(90deg,transparent,#000 10%,#000 90%,transparent);-webkit-mask-composite:source-in;mask-image:linear-gradient(#000 45%,transparent 96%),linear-gradient(90deg,transparent,#000 10%,#000 90%,transparent);mask-composite:intersect}}
+${HERO_CSS}
 .tabs{position:sticky;top:calc(var(--top) + 8px);z-index:10;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));margin:18px 0 14px;padding:4px;background:var(--card);border:1px solid var(--line);border-radius:16px;box-shadow:0 10px 30px rgba(0,0,0,.45)}
 .tabs .ind{display:none;position:absolute;top:4px;bottom:4px;left:4px;width:calc((100% - 8px)/3);border-radius:12px;background:var(--gold);transform:translateX(calc(var(--i,1)*100%));transition:transform .28s var(--out)}
 .js .tabs .ind{display:block}
@@ -552,6 +561,9 @@ ul#list{list-style:none;padding:0;margin:0}
 [data-s=waiting] .pill{animation:breathe 2.4s ease-in-out infinite}
 .step{flex:1 1 auto;min-width:0;font-size:13px;font-weight:600;color:var(--c);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .card h3{margin:9px 0 3px;font-size:17px;font-weight:600;line-height:1.25;overflow-wrap:anywhere;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;line-clamp:3;overflow:hidden}
+.card a.go{color:inherit;text-decoration:none}.card a.go::after{content:"";position:absolute;inset:0;z-index:0;border-radius:inherit}
+.card .acts{position:relative;z-index:1;pointer-events:none}.card .acts>*{pointer-events:auto}
+.card:has(a.go:active){background:var(--card-hi)}
 .card h3.url{display:block;white-space:nowrap;text-overflow:ellipsis;font-size:15px;color:var(--muted)}
 .meta{margin:0;color:var(--muted);font-size:13px;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .err{margin:6px 0 0;color:var(--err);font:12.5px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace;overflow-wrap:anywhere;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:4;line-clamp:4;overflow:hidden}
@@ -559,7 +571,6 @@ ul#list{list-style:none;padding:0;margin:0}
 .chip{position:relative;display:inline-flex;align-items:center;height:34px;padding:0 12px;border-radius:10px;font:600 14px system-ui,-apple-system,sans-serif;color:var(--text);background:var(--card-hi);border:1px solid var(--line);text-decoration:none;cursor:pointer;white-space:nowrap;transition:transform .08s,background .15s}
 .chip::before{content:"";position:absolute;inset:-5px}
 .chip:active,.cf:active{transform:scale(.96)}
-.chip.play{color:var(--bg);background:var(--gold);border-color:var(--gold)}
 .chip.del{color:var(--yuck);background:transparent;border-color:transparent;padding:0 6px}
 .chip:disabled{opacity:.6}
 .teeth{position:absolute;left:0;bottom:0;width:calc(var(--p,1)*100%);height:6px;background:conic-gradient(from 135deg at 50% 0,var(--c) 90deg,transparent 0) 0 0/12px 6px repeat-x;animation:gnaw .8s linear infinite;transition:width .6s var(--out)}
@@ -584,7 +595,7 @@ ul#list{list-style:none;padding:0;margin:0}
 @keyframes bite{from{transform:scale(.94)}}
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
 </style></head><body><div id="ptr" aria-live="polite"></div><main>
-<header class="hero"><img src="/${HERO}" alt="The Mimic chest, eating a pile of articles"><div><h1>${esc(title)}</h1><p id="growl">ARTICLES IN. NOISES OUT. NOISES FADE IN ${retentionDays(env)} DAYS. WORDS STAY FOREVER. OM NOM.</p></div></header>
+${heroHeader(env, title)}
 <nav class="tabs" role="tablist"><i class="ind"></i><a href="#mouth" role="tab"><span class="em">🫦</span><span>MOUTH</span></a><a href="#abyss" role="tab"><span class="em">🕳️</span><span>ABYSS</span><b class="badge" id="busy"${busy ? "" : " hidden"}>${busy}</b></a><a href="#noises" role="tab"><span class="em">💥</span><span>NOISES</span></a></nav>
 <section id="mouth" class="tab">
 <p class="fine">Feed things into my 🫦 MOUTH. I store them in my 🕳️ ABYSS. Then you hear the 💥 NOISES. OM NOM.</p>
@@ -617,15 +628,12 @@ var i=TABS.indexOf(id),was=TABS.indexOf(cur);document.querySelector(".tabs").sty
 document.querySelectorAll(".tab").forEach(function(t){t.classList.toggle("on",t.id===id)});document.querySelectorAll(".tabs a").forEach(function(a){a.setAttribute("aria-selected",a.getAttribute("href")==="#"+id)});
 var el=document.getElementById(id);if(cur&&cur!==id&&el.animate&&!RM)el.animate([{opacity:0,transform:"translateX("+(i>was?12:-12)+"px)"},{opacity:1,transform:"none"}],{duration:200,easing:OUT});cur=id}
 addEventListener("hashchange",show);show();
-// The status bar scrim shows only once the hero has scrolled away, so the Mimic's eyes stay visible at the top.
-var hero=document.querySelector(".hero");function past(){document.body.classList.toggle("past",!!hero&&hero.getBoundingClientRect().bottom<80)}addEventListener("scroll",past,{passive:true});past();
 document.querySelectorAll(".tabs a").forEach(function(a){a.addEventListener("click",function(e){e.preventDefault();history.replaceState(null,"",a.getAttribute("href"));show()})});
 // Cards come in one by one on the first load.
 [].slice.call(document.querySelectorAll("#list>li"),0,8).forEach(function(c,k){c.classList.add("new");c.style.animationDelay=k*30+"ms";setTimeout(function(){c.classList.remove("new");c.style.animationDelay=""},700+k*30)});
 var NOMS=["OM NOM! COPIED!","GULP! IN YOUR CLIPBOARD!","CHOMP. DONE. 🦷","*BURP* COPIED","YUM. CLIPBOARD FED."];
 document.addEventListener("click",function(e){var b=e.target.closest("[data-copy]");if(!b)return;navigator.clipboard.writeText(b.dataset.copy).then(function(){var t=b.querySelector(".go")||b;if(!b.dataset.l)b.dataset.l=t.textContent;t.textContent=NOMS[Math.floor(Math.random()*NOMS.length)];b.classList.remove("ok");void b.offsetWidth;b.classList.add("ok");clearTimeout(b._t);b._t=setTimeout(function(){t.textContent=b.dataset.l;b.classList.remove("ok")},1800)})});
-var GROWLS=["ARTICLES IN. NOISES OUT. OM NOM.","I AM A CHEST. I AM HUNGRY. THESE FACTS ARE RELATED.","FEED ME WORDS. I SPIT OUT PODCASTS. THIS IS SCIENCE.","I ATE A PAYWALL ONCE. IT WAS CRUNCHY.","NOM NOM NOM NOM NOM NOM NOM NOM.","DO NOT PUT YOUR HAND IN ME. PUT A LINK IN ME.","I HAVE TEETH WHERE MY LID SHOULD BE. WHAT OF IT.","YOU LOOK CRUNCHY. JUST AN OBSERVATION.","I DREAM OF LONGREADS. 10,000 WORDS. MMMMM."];
-var g=document.getElementById("growl");if(g&&Math.random()<0.75)g.textContent=GROWLS[Math.floor(Math.random()*GROWLS.length)];
+${HERO_JS}
 if(location.pathname.endsWith("/add"))history.replaceState(null,"",${json(`${base}/`)}+location.hash);
 // A card leaves like a closing jaw: it shuts from top and bottom, then the gap closes.
 function chomp(el){el.dataset.bye=1;var shut=el.animate?el.animate(RM?[{opacity:1},{opacity:0}]:[{clipPath:"inset(0 0 0 0 round 18px)",transform:"none",opacity:1},{clipPath:"inset(50% 0 50% 0 round 18px)",transform:"scale(.98)",opacity:0}],{duration:RM?150:160,easing:IN,fill:"forwards"}).finished:Promise.resolve();
@@ -666,43 +674,104 @@ if("serviceWorker" in navigator)navigator.serviceWorker.register("${esc(base)}/s
 
 // ---------- Read (the kept text) ----------
 
-/** read/<id> is a page to read. read/<id>.md is the raw text. read/<id>.pdf is the original PDF. */
+/** read/<id>.md is the raw text. read/<id>.pdf is the original PDF. read/<id> was the read page: it is now the public page /<id>. */
 async function serveRead(env: Env, origin: string, name: string): Promise<Response> {
 	const id = name.replace(/\.(md|pdf)$/, "");
+	if (id === name) return Response.redirect(`${origin}/${id}`, 301);
 	if (name.endsWith(".pdf")) {
 		const obj = await env.AUDIO.get(pdfKey(id));
 		if (!obj) return new Response("Not found", { status: 404 });
 		return new Response(obj.body, { headers: { "Content-Type": "application/pdf", "Content-Disposition": `inline; filename="${id}.pdf"`, "Cache-Control": "private, max-age=86400" } });
 	}
-	const [obj, item] = await Promise.all([env.AUDIO.get(readKey(id)), loadItem(env, id)]);
+	const obj = await env.AUDIO.get(readKey(id));
 	if (!obj) return new Response("Not found", { status: 404 });
-	const md = await obj.text();
-	if (name.endsWith(".md")) return new Response(md, { headers: { "Content-Type": "text/markdown; charset=utf-8" } });
-	return html(readPage(env, origin, id, item, md));
+	return new Response(obj.body, { headers: { "Content-Type": "text/markdown; charset=utf-8" } });
 }
 
-function readPage(env: Env, origin: string, id: string, item: Item | null, md: string): string {
-	const base = `${origin}/${env.TOKEN}`;
-	const title = (item?.title?.replace(/ \(Part \d+ of \d+\)$/, "") || md.match(/^#\s+(.+)$/m)?.[1] || "Some text").trim();
-	const meta = [item?.byline && `By ${item.byline}`, item?.site, item && new Date(item.created).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }), item?.words && `${item.words.toLocaleString("en-GB")} words`].filter(Boolean).join(" · ");
-	const links = [
-		`<a href="${esc(base)}/#abyss">← 🕳️ ABYSS</a>`,
-		item?.status === "done" && !item.gone && `<a href="${esc(`${base}/audio/${id}.mp3`)}">Play</a>`,
-		item?.url && `<a href="${esc(item.url)}">Source</a>`,
-		item?.pdf && `<a href="${esc(`${base}/read/${id}.pdf`)}">PDF</a>`,
-		`<a href="${esc(`${base}/read/${id}.md`)}">Markdown</a>`,
-	].filter(Boolean);
-	return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title><link rel="icon" href="${esc(base)}/icon-192.png">
+// ---------- Public pages (no token) ----------
+// /<id> is a page for one item: the player, a download link, and the kept text. Anyone with the link can see it.
+// It has no actions and must never contain the token. /<id>.mp3, /<id>.md and /<id>.pdf are its files.
+
+async function servePublic(env: Env, req: Request, origin: string, id: string, ext?: string): Promise<Response> {
+	const item = await loadItem(env, id);
+	if (!item) return html(publicPage(env, origin, null, null), 404);
+	const root = rootId(id);
+	if (ext === "mp3") {
+		if (item.status !== "done" || item.gone) return new Response("Not found", { status: 404 });
+		return serveAudio(env, req, id, new URL(req.url).searchParams.has("download") ? `${fileName(item)}.mp3` : undefined);
+	}
+	if (ext === "pdf" || ext === "md") {
+		const obj = await env.AUDIO.get(ext === "pdf" ? pdfKey(root) : readKey(root));
+		if (!obj) return new Response("Not found", { status: 404 });
+		const type = ext === "pdf" ? "application/pdf" : "text/markdown; charset=utf-8";
+		return new Response(obj.body, { headers: { "Content-Type": type, "Content-Disposition": `inline; filename="${fileName(item)}.${ext}"`, "Cache-Control": "public, max-age=3600" } });
+	}
+	const md = item.saved ? await (await env.AUDIO.get(readKey(root)))?.text() : undefined;
+	return html(publicPage(env, origin, item, md ?? null));
+}
+
+/** A safe file name from the title, such as "how-to-do-great-work". */
+const fileName = (i: Item) => (i.title ?? "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80) || i.id;
+
+function publicPage(env: Env, origin: string, i: Item | null, md: string | null): string {
+	const v = i && view(i);
+	const title = i ? (i.title || md?.match(/^#\s+(.+)$/m)?.[1] || i.url || "Some text").trim() : "NOTHING HERE";
+	const date = i && new Date(i.created).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+	const meta = i ? [i.byline && `By ${i.byline}`, i.site, date, i.words && `${i.words.toLocaleString("en-GB")} words`, i.duration && i.status === "done" && !i.gone && `${Math.max(1, Math.round(i.duration / 60))} min`].filter(Boolean).join(" · ") : "";
+	const days = retentionDays(env);
+	const playable = i?.status === "done" && !i.gone;
+	const mp3 = i ? `/${i.id}.mp3${i.aired ? `?g=${Date.parse(i.aired)}` : ""}` : "";
+	// What happens where the player goes, for each state.
+	const noAudio: Record<View["state"], string> = {
+		done: "",
+		meat: `🍖 MEAT ONLY. The 💥 NOISES faded after ${days} days. The words stay FOREVER. They are below.`,
+		chewing: "🦷 CHEWING. The 💥 NOISES are not ready yet. Come back soon.",
+		waiting: "🫦 WAITING. The 💥 NOISES are not ready yet. Come back soon.",
+		stuck: "🧊 STUCK. No 💥 NOISES yet.",
+		failed: "🤮 YUCK. I could not make 💥 NOISES from this one.",
+	};
+	const player = !i
+		? `<p class="none">My 🕳️ ABYSS has nothing at this link. Maybe it was DELETED. Maybe it was NEVER HERE. Maybe I ATE IT. 🫥</p>`
+		: playable
+			? `<audio controls preload="metadata" src="${esc(mp3)}"></audio><a class="btn" href="${esc(`/${i.id}.mp3?download`)}" download="${esc(fileName(i))}.mp3">Download MP3</a>`
+			: `<p class="none">${esc(noAudio[v!.state])}</p>`;
+	const links = i ? [i.url && `<a class="chip" href="${esc(i.url)}">Source</a>`, i.pdf && `<a class="chip" href="${esc(`/${i.id}.pdf`)}">PDF</a>`, md && `<a class="chip" href="${esc(`/${i.id}.md`)}">Markdown</a>`].filter(Boolean) : [];
+	const body = md ? markdownToHtml(md.replace(/^#\s+.+\n+/, "")) : i?.excerpt ? `<p>${esc(i.excerpt)}</p>` : "";
+	const art = i?.image || `${origin}/${COVER}`;
+	const desc = i?.excerpt || (md ?? "").replace(/^#.*$/gm, "").replace(/\s+/g, " ").trim().slice(0, 200);
+	const [emoji, word] = v ? LABEL[v.state] : ["🫥", "GONE"];
+	return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>${esc(title)} · 🍖 PODCHAST</title>
+<meta name="robots" content="noindex"><meta name="theme-color" content="${BG}"><meta name="color-scheme" content="dark"><link rel="icon" href="/${COVER}"><link rel="apple-touch-icon" href="/${COVER}">
+<meta property="og:site_name" content="🍖 PODCHAST"><meta property="og:type" content="article"><meta property="og:title" content="${esc(title)}">${desc ? `<meta property="og:description" content="${esc(desc)}"><meta name="description" content="${esc(desc)}">` : ""}<meta property="og:image" content="${esc(art)}">${playable ? `<meta property="og:audio" content="${esc(origin + mp3)}"><meta property="og:audio:type" content="audio/mpeg">` : ""}<meta name="twitter:card" content="summary_large_image">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&display=swap" rel="stylesheet">
 <style>
-:root{--bg:#fbf6ec;--ink:#20293c;--muted:#6b4226;--link:#0b5f78;--rule:#e8cf9f}
-@media (prefers-color-scheme:dark){:root{--bg:#161a21;--ink:#ece6d8;--muted:#e8cf9f;--link:#5fd8e6;--rule:#3a404c}}
-html{background:var(--bg);overflow-x:hidden}body{margin:0;overflow-x:hidden;overflow-wrap:anywhere;padding:24px 16px 64px;color:var(--ink);background:var(--bg);font:19px/1.6 Georgia,"Iowan Old Style",serif}
-main{max-width:680px;margin:0 auto}nav{display:flex;flex-wrap:wrap;gap:16px;font:600 15px system-ui,sans-serif;margin-bottom:24px}a{color:var(--link)}
-h1{font-size:34px;line-height:1.15;margin:0 0 8px}h2,h3,h4{line-height:1.25;margin:1.6em 0 .4em}.meta{color:var(--muted);font:14px system-ui,sans-serif;margin:0 0 28px;padding-bottom:16px;border-bottom:2px solid var(--rule)}
-blockquote{margin:1em 0;padding-left:16px;border-left:3px solid var(--rule)}pre{white-space:pre-wrap;font-size:14px;background:rgba(0,0,0,.05);padding:12px;border-radius:8px}li{margin:.3em 0}img,video,iframe,table{max-width:100%}table{display:block;overflow-x:auto}
-</style></head><body><main><nav>${links.join("")}</nav><h1>${esc(title)}</h1>${meta ? `<p class="meta">${esc(meta)}</p>` : ""}
-${markdownToHtml(md.replace(/^#\s+.+\n+/, ""))}
-</main></body></html>`;
+${HERO_CSS}
+[data-s=chewing]{--c:var(--chew)}[data-s=waiting]{--c:var(--wait)}[data-s=done]{--c:var(--noise)}[data-s=meat]{--c:var(--meat)}[data-s=stuck]{--c:var(--stuck)}[data-s=failed]{--c:var(--yuck)}
+.pod{margin:22px 0 0;padding:16px;background:var(--card);border:1px solid var(--line);border-radius:18px;display:grid;gap:12px}
+.pill{justify-self:start;display:inline-flex;align-items:center;gap:5px;padding:4px 10px 4px 8px;border-radius:999px;font:700 11.5px/1 Fredoka,system-ui,sans-serif;letter-spacing:.05em;color:var(--c);background:color-mix(in srgb,var(--c) 16%,transparent);border:1px solid color-mix(in srgb,var(--c) 40%,transparent)}
+.pod h2{margin:0;font:600 24px/1.2 Fredoka,system-ui,sans-serif;overflow-wrap:anywhere}
+.pod .meta{margin:-4px 0 0;color:var(--muted);font-size:13.5px}
+audio{display:block;width:100%;height:48px;color-scheme:dark}
+.btn{display:flex;justify-content:center;align-items:center;min-height:46px;padding:0 18px;font:700 17px Fredoka,system-ui,sans-serif;color:var(--bg);background:var(--gold);border-radius:12px;box-shadow:0 3px 0 var(--gold-d);text-decoration:none}
+.btn:active{transform:translateY(2px);box-shadow:0 1px 0 var(--gold-d)}
+.none{margin:0;padding:12px 14px;border-radius:12px;background:color-mix(in srgb,var(--c) 12%,var(--bg2));border:1px solid color-mix(in srgb,var(--c) 35%,transparent);font-weight:600}
+.links{display:flex;flex-wrap:wrap;gap:8px}
+.chip{display:inline-flex;align-items:center;height:34px;padding:0 12px;border-radius:10px;font:600 14px system-ui,-apple-system,sans-serif;color:var(--text);background:var(--card-hi);border:1px solid var(--line);text-decoration:none}
+article{margin:28px 4px 0;font:19px/1.65 Georgia,"Iowan Old Style",serif;color:#e9e1d4;overflow-wrap:anywhere}
+article h2,article h3,article h4{font-family:Fredoka,system-ui,sans-serif;font-weight:600;line-height:1.25;margin:1.6em 0 .4em;color:var(--text)}
+article blockquote{margin:1em 0;padding-left:16px;border-left:3px solid var(--line);color:var(--muted)}
+article pre{white-space:pre-wrap;font-size:14px;background:var(--bg2);border:1px solid var(--line);padding:12px;border-radius:10px}
+article code{font:15px ui-monospace,SFMono-Regular,Menlo,monospace}
+article li{margin:.3em 0}article img,article table{max-width:100%}article table{display:block;overflow-x:auto}
+footer{margin:40px 4px 0;color:var(--dim);font:600 12px Fredoka,system-ui,sans-serif;letter-spacing:.08em}
+</style></head><body><main>
+${heroHeader(env, "🍖 PODCHAST")}
+<section class="pod" data-s="${v?.state ?? "stuck"}"><span class="pill"><span>${emoji}</span>${word}</span><h2>${esc(title)}</h2>${meta ? `<p class="meta">${esc(meta)}</p>` : ""}
+${player}
+${links.length ? `<div class="links">${links.join("")}</div>` : ""}</section>
+${body ? `<article>${body}</article>` : ""}
+<footer>CHEWED BY 🍖 PODCHAST. OM NOM.</footer>
+</main><script>${HERO_JS}</script></body></html>`;
 }
 
 /** A small, safe markdown renderer for the read page. All text is escaped first. */
@@ -803,6 +872,9 @@ async function handleFetch(req: Request, env: Env): Promise<Response> {
 	// The artwork is public, with no token and no query string, so podcast apps' image servers can fetch it.
 	if (url.pathname === `/${COVER}`) return coverResponse();
 	if (url.pathname === `/${HERO}`) return new Response(hero, { headers: { "Content-Type": "image/jpeg", "Cache-Control": "public, max-age=31536000, immutable" } });
+	// Public pages: /<id>, and its files /<id>.mp3, /<id>.md, /<id>.pdf. They never use the token.
+	const pub = parts.length === 1 && !safeEqual(parts[0], env.TOKEN) ? parts[0].match(/^([a-z0-9]+-[0-9a-f]{8}(?:-p\d+)?)(?:\.(mp3|md|pdf))?$/) : null;
+	if (pub) return servePublic(env, req, url.origin, pub[1], pub[2]);
 	if (!parts.length || !safeEqual(parts[0], env.TOKEN)) return new Response("Not found", { status: 404 });
 	const [, a, b] = parts;
 	if (!a) return html(statusPage(env, url.origin, await withProgress(env, await listItems(env))));
@@ -875,7 +947,7 @@ async function queueReply(req: Request, env: Env, add: AddRequest): Promise<Resp
 	return reply(req, 200, `OM NOM NOM! SWALLOWED: ${what} 😋🦷 Burping it into your feed soon.`, { id: item.id });
 }
 
-const html = (body: string) => new Response(body, { headers: { "Content-Type": "text/html; charset=utf-8" } });
+const html = (body: string, status = 200) => new Response(body, { status, headers: { "Content-Type": "text/html; charset=utf-8" } });
 
 // ---------- Queue consumer ----------
 
