@@ -65,8 +65,9 @@ Podchast has its own words. In all UI and copy, write a keyword in ALL CAPS, wit
 | ♻️ RECHOMP | Make the audio again. |
 | 🗑️ DELETE | Delete the item. |
 | 📮 SHARE | Share the public page (system share sheet, or copy the link). |
+| 🥩 RAW | The raw markdown text (`/<id>.md`). |
 
-Plain labels stay plain: PDF, Markdown, Download MP3. "Vom" means content the system cannot eat. Do not use it for adding.
+Plain labels stay plain: PDF, Download MP3. "Vom" means content the system cannot eat. Do not use it for adding.
 
 ## Commands
 

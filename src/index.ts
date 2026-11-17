@@ -742,11 +742,10 @@ function publicPage(env: Env, origin: string, i: Item | null, md: string | null)
 		: playable
 			? `<audio controls preload="metadata" src="${esc(mp3)}"></audio><a class="btn" href="${esc(`/${i.id}.mp3?download`)}" download="${esc(fileName(i))}.mp3">Download MP3</a>`
 			: `<p class="none">${esc(noAudio[v!.state])}</p>`;
-	const links = i ? [`<button type="button" class="chip share" data-share="/${esc(i.id)}" data-title="${esc(title)}">📮 SHARE</button>`, i.url && `<a class="chip" href="${esc(i.url)}">🔗 SOURCE</a>`, i.pdf && `<a class="chip" href="${esc(`/${i.id}.pdf`)}">PDF</a>`, md && `<a class="chip" href="${esc(`/${i.id}.md`)}">Markdown</a>`].filter(Boolean) : [];
+	const links = i ? [`<button type="button" class="chip share" data-share="/${esc(i.id)}" data-title="${esc(title)}">📮 SHARE</button>`, i.url && `<a class="chip" href="${esc(i.url)}">🔗 SOURCE</a>`, i.pdf && `<a class="chip" href="${esc(`/${i.id}.pdf`)}">PDF</a>`, md && `<a class="chip" href="${esc(`/${i.id}.md`)}">🥩 RAW</a>`].filter(Boolean) : [];
 	const body = md ? markdownToHtml(md.replace(/^#\s+.+\n+/, "")) : i?.excerpt ? `<p>${esc(i.excerpt)}</p>` : "";
 	const art = i?.image || `${origin}/${COVER}`;
 	const desc = i?.excerpt || (md ?? "").replace(/^#.*$/gm, "").replace(/\s+/g, " ").trim().slice(0, 200);
-	const [emoji, word] = v ? LABEL[v.state] : ["🫥", "GONE"];
 	return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>${esc(title)} · 🍖 PODCHAST</title>
 <meta name="robots" content="noindex"><meta name="theme-color" content="${BG}"><meta name="color-scheme" content="dark"><link rel="icon" href="/${COVER}"><link rel="apple-touch-icon" href="/${COVER}">
 <meta property="og:site_name" content="🍖 PODCHAST"><meta property="og:type" content="article"><meta property="og:title" content="${esc(title)}">${desc ? `<meta property="og:description" content="${esc(desc)}"><meta name="description" content="${esc(desc)}">` : ""}<meta property="og:image" content="${esc(art)}">${playable ? `<meta property="og:audio" content="${esc(origin + mp3)}"><meta property="og:audio:type" content="audio/mpeg">` : ""}<meta name="twitter:card" content="summary_large_image">
@@ -754,10 +753,11 @@ function publicPage(env: Env, origin: string, i: Item | null, md: string | null)
 <style>
 ${HERO_CSS}
 [data-s=chewing]{--c:var(--chew)}[data-s=waiting]{--c:var(--wait)}[data-s=done]{--c:var(--noise)}[data-s=meat]{--c:var(--meat)}[data-s=stuck]{--c:var(--stuck)}[data-s=failed]{--c:var(--yuck)}
-.pod{margin:22px 0 0;padding:16px;background:var(--card);border:1px solid var(--line);border-radius:18px;display:grid;gap:12px}
-.pill{justify-self:start;display:inline-flex;align-items:center;gap:5px;padding:4px 10px 4px 8px;border-radius:999px;font:700 11.5px/1 Fredoka,system-ui,sans-serif;letter-spacing:.05em;color:var(--c);background:color-mix(in srgb,var(--c) 16%,transparent);border:1px solid color-mix(in srgb,var(--c) 40%,transparent)}
-.pod h2{margin:0;font:600 24px/1.2 Fredoka,system-ui,sans-serif;overflow-wrap:anywhere}
-.pod .meta{margin:-4px 0 0;color:var(--muted);font-size:13.5px}
+.top{margin:22px 4px 0;display:grid;gap:10px}
+.pod:has(.none){padding:0;border:0;background:none}
+.top h2{margin:0;font:600 26px/1.2 Fredoka,system-ui,sans-serif;overflow-wrap:anywhere}
+.top .meta{margin:-4px 0 0;color:var(--muted);font-size:13.5px}
+.pod{margin:18px 0 0;padding:14px;background:var(--card);border:1px solid var(--line);border-radius:18px;display:grid;gap:12px}
 audio{display:block;width:100%;height:48px;color-scheme:dark}
 .btn{display:flex;justify-content:center;align-items:center;min-height:46px;padding:0 18px;font:700 17px Fredoka,system-ui,sans-serif;color:var(--bg);background:var(--gold);border-radius:12px;box-shadow:0 3px 0 var(--gold-d);text-decoration:none}
 .btn:active{transform:translateY(2px);box-shadow:0 1px 0 var(--gold-d)}
@@ -774,9 +774,9 @@ article li{margin:.3em 0}article img,article table{max-width:100%}article table{
 footer{margin:40px 4px 0;color:var(--dim);font:600 12px Fredoka,system-ui,sans-serif;letter-spacing:.08em}
 </style></head><body><main>
 ${heroHeader(env, "🍖 PODCHAST")}
-<section class="pod" data-s="${v?.state ?? "stuck"}"><span class="pill"><span>${emoji}</span>${word}</span><h2>${esc(title)}</h2>${meta ? `<p class="meta">${esc(meta)}</p>` : ""}
-${player}
+<section class="top"><h2>${esc(title)}</h2>${meta ? `<p class="meta">${esc(meta)}</p>` : ""}
 ${links.length ? `<div class="links">${links.join("")}</div>` : ""}</section>
+<section class="pod" data-s="${v?.state ?? "stuck"}">${player}</section>
 ${body ? `<article>${body}</article>` : ""}
 <footer>CHEWED BY 🍖 PODCHAST. OM NOM.</footer>
 </main><script>${HERO_JS}${SHARE_JS}</script></body></html>`;
