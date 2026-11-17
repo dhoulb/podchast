@@ -495,12 +495,17 @@ function statusPage(env: Env, origin: string, items: Item[], note = ""): string 
 			// Chewing cards get a row of teeth along the bottom. Its width is the share of chunks spoken.
 			const p = v.state === "chewing" && i.chunks && i.progress ? Math.min(1, i.progress.done / i.chunks) : undefined;
 			const teeth = v.state === "chewing" ? `<div class="teeth${p === undefined ? " any" : ""}"${p === undefined ? "" : ` style="--p:${p.toFixed(3)}"`}></div>` : "";
+			// 🔗 SOURCE (and PDF) on the left. ♻️ RECHOMP, 🗑️ DELETE and 📮 SHARE in the bottom right corner.
 			const acts = [
 				i.url && `<a class="chip" href="${esc(i.url)}">🔗 SOURCE</a>`,
 				i.pdf && `<a class="chip" href="${esc(`${base}/read/${rootId(i.id)}.pdf`)}">PDF</a>`,
-				v.state !== "chewing" && v.state !== "waiting" && `<form method="post" action="${esc(`${base}/retry/${i.id}`)}" data-act="retry"><button class="chip">♻️ RECHOMP</button></form>`,
-				`<button type="button" class="chip i share" data-share="/${esc(i.id)}" data-title="${esc(i.title || i.url || "Some text")}" aria-label="SHARE" title="📮 SHARE">📮</button>`,
-				`<form class="del" method="post" action="${esc(`${base}/delete/${i.id}`)}" data-act="delete" onsubmit="return confirm('DELETE this one? Forever? No take-backs??')"><button class="chip del" aria-label="DELETE" title="🗑️ DELETE">🗑️</button></form>`,
+				`<span class="end">${[
+					v.state !== "chewing" && v.state !== "waiting" && `<form method="post" action="${esc(`${base}/retry/${i.id}`)}" data-act="retry"><button class="chip i" aria-label="RECHOMP" title="♻️ RECHOMP">♻️</button></form>`,
+					`<form class="del" method="post" action="${esc(`${base}/delete/${i.id}`)}" data-act="delete" onsubmit="return confirm('DELETE this one? Forever? No take-backs??')"><button class="chip i del" aria-label="DELETE" title="🗑️ DELETE">🗑️</button></form>`,
+					`<button type="button" class="chip i share" data-share="/${esc(i.id)}" data-title="${esc(i.title || i.url || "Some text")}" aria-label="SHARE" title="📮 SHARE">📮</button>`,
+				]
+					.filter(Boolean)
+					.join("")}</span>`,
 			].filter(Boolean);
 			return `<li class="card" data-k="${esc(i.id)}" data-s="${v.state}">
 <div class="row"><span class="pill"><span class="e">${emoji}</span>${word}</span>${v.step ? `<span class="step">${esc(v.step)}</span>` : ""}</div>
@@ -582,12 +587,11 @@ ul#list{list-style:none;padding:0;margin:0}
 .card h3.url{display:block;white-space:nowrap;text-overflow:ellipsis;font-size:15px;color:var(--muted)}
 .meta{margin:0;color:var(--muted);font-size:13px;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .err{margin:6px 0 0;color:var(--err);font:12.5px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace;overflow-wrap:anywhere;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:4;line-clamp:4;overflow:hidden}
-.acts{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}.acts form{display:flex;margin:0}.acts .share{margin-left:auto}
+.acts{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}.acts form{display:flex;margin:0}.acts .end{display:flex;gap:8px;margin-left:auto}
 .chip{position:relative;display:inline-flex;align-items:center;height:34px;padding:0 12px;border-radius:10px;font:600 14px system-ui,-apple-system,sans-serif;color:var(--text);background:var(--card-hi);border:1px solid var(--line);text-decoration:none;cursor:pointer;white-space:nowrap;transition:transform .08s,background .15s}
 .chip::before{content:"";position:absolute;inset:-5px}
 .chip:active,.cf:active{transform:scale(.96)}
-.chip.del{background:transparent;border-color:transparent;padding:0 8px;font-size:17px}
-.chip.i{padding:0 10px;font-size:17px}
+.chip.i{padding:0 10px;font-size:17px}.chip.busy{animation:breathe 1s ease-in-out infinite}
 .chip:disabled{opacity:.6}
 .teeth{position:absolute;left:0;bottom:0;width:calc(var(--p,1)*100%);height:6px;background:conic-gradient(from 135deg at 50% 0,var(--c) 90deg,transparent 0) 0 0/12px 6px repeat-x;animation:gnaw .8s linear infinite;transition:width .6s var(--out)}
 .teeth.any{opacity:.45}
@@ -678,7 +682,7 @@ function toast(t){draw(t);ptr.style.transform="translate(-50%,16px)";clearTimeou
 document.addEventListener("submit",function(e){var f=e.target,act=f.dataset&&f.dataset.act,li=f.closest("li");if(!act||!li||e.defaultPrevented||!window.fetch)return;e.preventDefault();
 var k=li.dataset.k,ok=function(r){if(!r.ok)throw new Error("HTTP "+r.status)},fail=function(err){delete gone[k];document.body.classList.add("ease");toast("🤮 "+err.message);refresh().catch(function(){})};
 if(act==="delete"){gone[k]=1;chomp(li).then(badge);fetch(f.action,{method:"POST"}).then(ok).catch(fail);return}
-var b=f.querySelector("button");b.textContent="♻️ CHOMPING…";b.disabled=true;fetch(f.action,{method:"POST",headers:{Accept:"application/json"}}).then(ok).then(refresh).catch(fail)});
+var b=f.querySelector("button");b.classList.add("busy");b.disabled=true;fetch(f.action,{method:"POST",headers:{Accept:"application/json"}}).then(ok).then(refresh).catch(fail)});
 // Pull to refresh, for the Home Screen app (it has no reload button).
 var ptr=document.getElementById("ptr"),y0=null,pull=0,GO=70;
 function draw(text){ptr.textContent=text||(pull>=GO?"🦷 LET GO. I CHOMP.":pull?"⬇️ PULL TO CHOMP":"");ptr.style.transform="translate(-50%,"+(pull-60)+"px)";document.querySelector("main").style.transform=pull?"translateY("+pull+"px)":""}
