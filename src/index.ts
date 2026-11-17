@@ -458,6 +458,10 @@ h1{margin:0;font-size:36px;font-weight:700;line-height:1;color:var(--text);lette
 @media (min-width:752px){header.hero{margin:0}header.hero img{border-radius:0 0 24px 24px;-webkit-mask-image:linear-gradient(#000 45%,transparent 96%),linear-gradient(90deg,transparent,#000 10%,#000 90%,transparent);-webkit-mask-composite:source-in;mask-image:linear-gradient(#000 45%,transparent 96%),linear-gradient(90deg,transparent,#000 10%,#000 90%,transparent);mask-composite:intersect}}`;
 const heroHeader = (env: Env, title: string) =>
 	`<header class="hero"><img src="/${HERO}" alt="The Mimic chest, eating a pile of articles"><div><h1>${esc(title)}</h1><p id="growl">ARTICLES IN. NOISES OUT. NOISES FADE IN ${retentionDays(env)} DAYS. WORDS STAY FOREVER. OM NOM.</p></div></header>`;
+// Share buttons: the system share sheet where there is one, else copy the link.
+const SHARE_JS = `document.addEventListener("click",function(e){var b=e.target.closest("[data-share]");if(!b)return;e.preventDefault();var u=new URL(b.dataset.share,location.href).href;
+if(navigator.share){navigator.share({title:b.dataset.title||document.title,url:u}).catch(function(){});return}
+if(navigator.clipboard)navigator.clipboard.writeText(u).then(function(){if(!b.dataset.l)b.dataset.l=b.textContent;b.textContent="📮 LINK COPIED";b.classList.add("ok");clearTimeout(b._t);b._t=setTimeout(function(){b.textContent=b.dataset.l;b.classList.remove("ok")},1800)})});`;
 const HERO_JS = `// The status bar scrim shows only once the hero has scrolled away, so the Mimic's eyes stay visible at the top.
 var hero=document.querySelector(".hero");function past(){document.body.classList.toggle("past",!!hero&&hero.getBoundingClientRect().bottom<80)}addEventListener("scroll",past,{passive:true});past();
 var GROWLS=["ARTICLES IN. NOISES OUT. OM NOM.","I AM A CHEST. I AM HUNGRY. THESE FACTS ARE RELATED.","FEED ME WORDS. I SPIT OUT PODCASTS. THIS IS SCIENCE.","I ATE A PAYWALL ONCE. IT WAS CRUNCHY.","NOM NOM NOM NOM NOM NOM NOM NOM.","DO NOT PUT YOUR HAND IN ME. PUT A LINK IN ME.","I HAVE TEETH WHERE MY LID SHOULD BE. WHAT OF IT.","YOU LOOK CRUNCHY. JUST AN OBSERVATION.","I DREAM OF LONGREADS. 10,000 WORDS. MMMMM."];
@@ -485,7 +489,8 @@ function statusPage(env: Env, origin: string, items: Item[], note = ""): string 
 				i.url && `<a class="chip" href="${esc(i.url)}">Source</a>`,
 				i.pdf && `<a class="chip" href="${esc(`${base}/read/${rootId(i.id)}.pdf`)}">PDF</a>`,
 				v.state !== "chewing" && v.state !== "waiting" && `<form method="post" action="${esc(`${base}/retry/${i.id}`)}" data-act="retry"><button class="chip">Re-chomp</button></form>`,
-				`<form class="del" method="post" action="${esc(`${base}/delete/${i.id}`)}" data-act="delete" onsubmit="return confirm('DELETE this one? Forever? No take-backs??')"><button class="chip del">Delete</button></form>`,
+				`<button type="button" class="chip i share" data-share="/${esc(i.id)}" data-title="${esc(i.title || i.url || "Some text")}" aria-label="Share" title="Share">📮</button>`,
+				`<form class="del" method="post" action="${esc(`${base}/delete/${i.id}`)}" data-act="delete" onsubmit="return confirm('DELETE this one? Forever? No take-backs??')"><button class="chip del" aria-label="Delete" title="Delete">🗑️</button></form>`,
 			].filter(Boolean);
 			return `<li class="card" data-k="${esc(i.id)}" data-s="${v.state}">
 <div class="row"><span class="pill"><span class="e">${emoji}</span>${word}</span>${v.step ? `<span class="step">${esc(v.step)}</span>` : ""}</div>
@@ -567,11 +572,12 @@ ul#list{list-style:none;padding:0;margin:0}
 .card h3.url{display:block;white-space:nowrap;text-overflow:ellipsis;font-size:15px;color:var(--muted)}
 .meta{margin:0;color:var(--muted);font-size:13px;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .err{margin:6px 0 0;color:var(--err);font:12.5px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace;overflow-wrap:anywhere;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:4;line-clamp:4;overflow:hidden}
-.acts{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}.acts form{display:flex;margin:0}.acts form.del{margin-left:auto}
+.acts{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}.acts form{display:flex;margin:0}.acts .share{margin-left:auto}
 .chip{position:relative;display:inline-flex;align-items:center;height:34px;padding:0 12px;border-radius:10px;font:600 14px system-ui,-apple-system,sans-serif;color:var(--text);background:var(--card-hi);border:1px solid var(--line);text-decoration:none;cursor:pointer;white-space:nowrap;transition:transform .08s,background .15s}
 .chip::before{content:"";position:absolute;inset:-5px}
 .chip:active,.cf:active{transform:scale(.96)}
-.chip.del{color:var(--yuck);background:transparent;border-color:transparent;padding:0 6px}
+.chip.del{background:transparent;border-color:transparent;padding:0 8px;font-size:17px}
+.chip.i{padding:0 10px;font-size:17px}
 .chip:disabled{opacity:.6}
 .teeth{position:absolute;left:0;bottom:0;width:calc(var(--p,1)*100%);height:6px;background:conic-gradient(from 135deg at 50% 0,var(--c) 90deg,transparent 0) 0 0/12px 6px repeat-x;animation:gnaw .8s linear infinite;transition:width .6s var(--out)}
 .teeth.any{opacity:.45}
@@ -634,6 +640,7 @@ document.querySelectorAll(".tabs a").forEach(function(a){a.addEventListener("cli
 var NOMS=["OM NOM! COPIED!","GULP! IN YOUR CLIPBOARD!","CHOMP. DONE. 🦷","*BURP* COPIED","YUM. CLIPBOARD FED."];
 document.addEventListener("click",function(e){var b=e.target.closest("[data-copy]");if(!b)return;navigator.clipboard.writeText(b.dataset.copy).then(function(){var t=b.querySelector(".go")||b;if(!b.dataset.l)b.dataset.l=t.textContent;t.textContent=NOMS[Math.floor(Math.random()*NOMS.length)];b.classList.remove("ok");void b.offsetWidth;b.classList.add("ok");clearTimeout(b._t);b._t=setTimeout(function(){t.textContent=b.dataset.l;b.classList.remove("ok")},1800)})});
 ${HERO_JS}
+${SHARE_JS}
 if(location.pathname.endsWith("/add"))history.replaceState(null,"",${json(`${base}/`)}+location.hash);
 // A card leaves like a closing jaw: it shuts from top and bottom, then the gap closes.
 function chomp(el){el.dataset.bye=1;var shut=el.animate?el.animate(RM?[{opacity:1},{opacity:0}]:[{clipPath:"inset(0 0 0 0 round 18px)",transform:"none",opacity:1},{clipPath:"inset(50% 0 50% 0 round 18px)",transform:"scale(.98)",opacity:0}],{duration:RM?150:160,easing:IN,fill:"forwards"}).finished:Promise.resolve();
@@ -735,7 +742,7 @@ function publicPage(env: Env, origin: string, i: Item | null, md: string | null)
 		: playable
 			? `<audio controls preload="metadata" src="${esc(mp3)}"></audio><a class="btn" href="${esc(`/${i.id}.mp3?download`)}" download="${esc(fileName(i))}.mp3">Download MP3</a>`
 			: `<p class="none">${esc(noAudio[v!.state])}</p>`;
-	const links = i ? [i.url && `<a class="chip" href="${esc(i.url)}">Source</a>`, i.pdf && `<a class="chip" href="${esc(`/${i.id}.pdf`)}">PDF</a>`, md && `<a class="chip" href="${esc(`/${i.id}.md`)}">Markdown</a>`].filter(Boolean) : [];
+	const links = i ? [`<button type="button" class="chip share" data-share="/${esc(i.id)}" data-title="${esc(title)}">📮 SHARE</button>`, i.url && `<a class="chip" href="${esc(i.url)}">Source</a>`, i.pdf && `<a class="chip" href="${esc(`/${i.id}.pdf`)}">PDF</a>`, md && `<a class="chip" href="${esc(`/${i.id}.md`)}">Markdown</a>`].filter(Boolean) : [];
 	const body = md ? markdownToHtml(md.replace(/^#\s+.+\n+/, "")) : i?.excerpt ? `<p>${esc(i.excerpt)}</p>` : "";
 	const art = i?.image || `${origin}/${COVER}`;
 	const desc = i?.excerpt || (md ?? "").replace(/^#.*$/gm, "").replace(/\s+/g, " ").trim().slice(0, 200);
@@ -756,7 +763,8 @@ audio{display:block;width:100%;height:48px;color-scheme:dark}
 .btn:active{transform:translateY(2px);box-shadow:0 1px 0 var(--gold-d)}
 .none{margin:0;padding:12px 14px;border-radius:12px;background:color-mix(in srgb,var(--c) 12%,var(--bg2));border:1px solid color-mix(in srgb,var(--c) 35%,transparent);font-weight:600}
 .links{display:flex;flex-wrap:wrap;gap:8px}
-.chip{display:inline-flex;align-items:center;height:34px;padding:0 12px;border-radius:10px;font:600 14px system-ui,-apple-system,sans-serif;color:var(--text);background:var(--card-hi);border:1px solid var(--line);text-decoration:none}
+.chip{display:inline-flex;align-items:center;height:34px;padding:0 12px;border-radius:10px;font:600 14px system-ui,-apple-system,sans-serif;color:var(--text);background:var(--card-hi);border:1px solid var(--line);text-decoration:none;cursor:pointer}
+.chip.ok{background:var(--noise);color:var(--bg)}
 article{margin:28px 4px 0;font:19px/1.65 Georgia,"Iowan Old Style",serif;color:#e9e1d4;overflow-wrap:anywhere}
 article h2,article h3,article h4{font-family:Fredoka,system-ui,sans-serif;font-weight:600;line-height:1.25;margin:1.6em 0 .4em;color:var(--text)}
 article blockquote{margin:1em 0;padding-left:16px;border-left:3px solid var(--line);color:var(--muted)}
@@ -771,7 +779,7 @@ ${player}
 ${links.length ? `<div class="links">${links.join("")}</div>` : ""}</section>
 ${body ? `<article>${body}</article>` : ""}
 <footer>CHEWED BY 🍖 PODCHAST. OM NOM.</footer>
-</main><script>${HERO_JS}</script></body></html>`;
+</main><script>${HERO_JS}${SHARE_JS}</script></body></html>`;
 }
 
 /** A small, safe markdown renderer for the read page. All text is escaped first. */
