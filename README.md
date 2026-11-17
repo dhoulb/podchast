@@ -13,7 +13,7 @@ You need a Cloudflare account, a GitHub account and a phone. Both accounts are f
 Copy this prompt into Claude, ChatGPT or another AI assistant:
 
 ```text
-Hey robot! I want to set up a 🪎 PODCHAST that can 🍖 DEVOUR links and content and turn them into a feed of 💥 NOISES for my podcast app. Read this link, do as much as you can yourself, then talk me through the technical steps I need to do: https://github.com/dhoulb/podchast
+Hey robot! I want to set up a PODCHAST that can 🍖 DEVOUR links and content and turn them into a feed of 💥 NOISES for my podcast app. Read this link, do as much as you can yourself, then talk me through the technical steps I need to do: https://github.com/dhoulb/podchast
 ```
 
 The link goes to the original PODCHAST. On a fork, change it to the link of the fork. (GitHub cannot put the current page link into a README.)
