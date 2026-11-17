@@ -527,7 +527,7 @@ form.add{display:grid;gap:10px}form.add details{display:grid;gap:10px}
 details>summary{list-style:none;cursor:pointer}details>summary::-webkit-details-marker{display:none}
 details>summary::after{content:"›";margin-left:auto;padding-left:8px;font:400 22px/1 system-ui,sans-serif;color:var(--muted);transition:transform .2s var(--out)}
 details[open]>summary::after{transform:rotate(90deg)}
-form.add summary{display:flex;align-items:center;color:var(--muted);font-size:15px;font-weight:600;padding:4px 2px}
+form.add summary{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:15px;font-weight:600;padding:4px 2px}
 .ways{background:var(--card);border:1px solid var(--line);border-radius:18px;overflow:hidden}
 .ways details+details{border-top:1px solid var(--line)}
 .ways summary{display:flex;align-items:center;gap:10px;min-height:54px;padding:0 16px;font-size:16px;font-weight:600}
@@ -565,6 +565,7 @@ ul#list{list-style:none;padding:0;margin:0}
 .cf{display:flex;width:100%;margin:0 0 10px;padding:0;font:inherit;text-align:left;background:var(--bg2);border:1px solid var(--line);border-radius:12px;overflow:hidden;cursor:pointer;transition:transform .08s}
 .cf code{flex:1 1 auto;min-width:0;padding:13px 12px;border:0;background:none;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;overflow-wrap:normal}
 .cf .go{flex:none;display:flex;align-items:center;padding:0 14px;font:700 15px Fredoka,system-ui,sans-serif;color:var(--bg);background:var(--gold);transition:background .15s}
+.ico{width:18px;height:18px;flex:none;color:var(--gold)}
 .small{font-size:13px;font-weight:600;color:var(--muted)}
 .apps{margin:0}.apps div{padding:10px 0;border-top:1px solid var(--line)}.apps div:first-child{border-top:0;padding-top:0}.apps dt{font-weight:700}.apps dd{margin:2px 0 0;color:var(--muted)}.apps b{color:var(--text)}
 #ptr:empty{visibility:hidden}#ptr{position:fixed;z-index:30;left:50%;top:var(--top);transform:translate(-50%,-60px);pointer-events:none;font:700 15px Fredoka,system-ui,sans-serif;padding:7px 14px;border-radius:999px;border:1px solid var(--line);background:var(--card-hi);color:var(--gold);box-shadow:0 8px 24px rgba(0,0,0,.5);white-space:nowrap}
@@ -584,12 +585,12 @@ ul#list{list-style:none;padding:0;margin:0}
 <nav class="tabs" role="tablist"><i class="ind"></i><a href="#mouth" role="tab"><span class="em">🫦</span><span>MOUTH</span></a><a href="#abyss" role="tab"><span class="em">🕳️</span><span>ABYSS</span><b class="badge" id="busy"${busy ? "" : " hidden"}>${busy}</b></a><a href="#noises" role="tab"><span class="em">💥</span><span>NOISES</span></a></nav>
 <section id="mouth" class="tab">
 <p class="fine">Feed things into my 🫦 MOUTH. I store them in my 🕳️ ABYSS. Then you hear the 💥 NOISES. OM NOM.</p>
-<div class="panel"><h2>Add a URL or content</h2><form class="add" method="post" action="${esc(base)}/add"><input type="url" name="url" placeholder="https://… (PUT A LINK IN MY MOUTH)"><button class="btn">🍖 DEVOUR</button>
-<details><summary>…or VOM A PILE OF TEXT AT ME 🤢</summary><input type="text" name="title" placeholder="Title (optional, I will guess)"><textarea name="content" rows="8" placeholder="Paste words. Markdown is fine. ## Headings become chapters. I EAT IT ALL."></textarea><button class="btn">🍖 DEVOUR</button></details></form></div>
+<div class="panel"><h2>🍖 Add MEAT</h2><form class="add" method="post" action="${esc(base)}/add"><input type="url" name="url" placeholder="https://… (PUT A LINK IN MY MOUTH)"><button class="btn">🍖 DEVOUR</button>
+<details><summary>…or SHOVEL A PILE OF TEXT AT ME <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><g transform="rotate(35 12 12)" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2.5h6M12 2.5v9"/><path d="M8 12h8v4.5a4 4 0 0 1-4 4.5 4 4 0 0 1-4-4.5z" fill="currentColor"/></g></svg></summary><input type="text" name="title" placeholder="Title (optional, I will guess)"><textarea name="content" rows="8" placeholder="Paste words. Markdown is fine. ## Headings become chapters. I EAT IT ALL."></textarea><button class="btn">🍖 DEVOUR</button></details></form></div>
 <h2 class="sect">OTHER WAYS IN</h2>
 <div class="ways">
 ${way("📱 iPhone and iPad", shortcut, true)}
-${way("🔖 Any browser (Chrome too)", `<ol class="steps"><li>Show your bookmarks bar. In Chrome, press <b>⌘⇧B</b>.</li><li>DRAG the button below onto the bar.</li><li>On any article, click the bookmark. The page goes in my 🫦 MOUTH.</li></ol><div class="btns"><a class="btn drag" href="${esc(bookmarklet)}" onclick="event.preventDefault();this.textContent='DRAG ME. DO NOT POKE ME. 😤'">🍖 DEVOUR</a></div>`)}
+${way("🌍 Browser", `<ol class="steps"><li>Show your bookmarks bar. In Chrome, press <b>⌘⇧B</b>.</li><li>DRAG the button below onto the bar.</li><li>On any article, click the bookmark. The page goes in my 🫦 MOUTH.</li></ol><div class="btns"><a class="btn drag" href="${esc(bookmarklet)}" onclick="event.preventDefault();this.textContent='DRAG ME. DO NOT POKE ME. 😤'">🍖 DEVOUR</a></div>`)}
 ${env.EMAIL_TO ? way("📧 Email", `<ol class="steps"><li>Send or forward anything to <b>${esc(env.EMAIL_TO)}</b>.</li><li>A link becomes its article. Longer text becomes an episode, and the subject is its title.</li><li>Attached PDFs become episodes too. I EAT PAPER.</li></ol><div class="btns">${copy("Copy email address 📧", env.EMAIL_TO, "btn alt")}</div>`) : ""}
 ${way("💻 Mac", `<ol class="steps"><li>The iPhone Shortcut syncs through iCloud. In Safari, use <b>Share → 🍖 DEVOUR</b>.</li><li>Want me in your Dock? In Safari, choose <b>File → Add to Dock</b>. I will sit there. Watching. Hungry.</li></ol>`)}
 ${way("🤖 Android", `<ol class="steps"><li>Open this page in Chrome.</li><li>Tap <b>Add to Home screen</b>.</li><li>Share any link to <b>Podchast</b>. I pay no rent. I eat links. OM.</li></ol>`)}
