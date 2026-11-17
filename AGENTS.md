@@ -44,6 +44,30 @@ Still ask Dave before you:
 - Failed items show in the feed as "🤮 SPAT OUT: …" with one shared clip, `audio/failed-v3.mp3`, made on demand.
 - `TOKEN` is a Worker secret. Its source is the `TOKEN` GitHub Actions secret; each deploy copies it to Cloudflare. Never write it into the repo, commits, PRs or logs.
 
+## Keywords
+
+Podchast has its own words. In all UI and copy, write a keyword in ALL CAPS, with its emoji directly before it (for example "Add 🍖 MEAT", "♻️ RECHOMP it"). Card buttons for 📮 SHARE and 🗑️ DELETE show only the emoji.
+
+| Keyword | Meaning |
+| --- | --- |
+| 🍖 PODCHAST | The app. |
+| 🍖 DEVOUR | Add something (the add button, the Shortcut, the bookmarklet). |
+| 🫦 MOUTH | The tab and URL where things go in. |
+| 🕳️ ABYSS | The list of all items. |
+| 💥 NOISES | The audio, and the feed tab. |
+| 🍖 MEAT | An item whose audio expired. Only the words are left. |
+| 🦷 CHEWING | Making the audio now. |
+| 🫦 WAITING | Queued, or waiting for the next attempt. |
+| 💥 NOISE | Done. The audio is ready. |
+| 🧊 STUCK | No progress for too long. |
+| 🤮 YUCK | Failed. In the feed: "🤮 SPAT OUT". |
+| 🔗 SOURCE | Open the original page. |
+| ♻️ RECHOMP | Make the audio again. |
+| 🗑️ DELETE | Delete the item. |
+| 📮 SHARE | Share the public page (system share sheet, or copy the link). |
+
+Plain labels stay plain: PDF, Markdown, Download MP3. "Vom" means content the system cannot eat. Do not use it for adding.
+
 ## Commands
 
 ```sh
