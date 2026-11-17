@@ -45,7 +45,7 @@ jobs:
       - name: Deploy
         run: |
           args=()
-          for name in FEED_TITLE RETENTION_DAYS VOICE RATE PITCH EDGE_FORMAT TTS_ENGINE AI_MODEL AI_SPEAKER SHORTCUT_URL EMAIL_TO; do
+          for name in FEED_TITLE RETENTION_DAYS VOICE RATE PITCH EDGE_FORMAT TTS_ENGINE AI_MODEL AI_SPEAKER SHORTCUT_URL EMAIL_TO DOMAIN; do
             value="${!name}"
             [ -n "$value" ] && args+=(--var "$name:$value")
           done
@@ -63,6 +63,7 @@ jobs:
           AI_SPEAKER: ${{ vars.AI_SPEAKER || secrets.AI_SPEAKER }}
           SHORTCUT_URL: ${{ vars.SHORTCUT_URL || secrets.SHORTCUT_URL }}
           EMAIL_TO: ${{ vars.EMAIL_TO || secrets.EMAIL_TO }}
+          DOMAIN: ${{ vars.DOMAIN || secrets.DOMAIN }}
       # Copy secrets to the Worker. A secret that is not set in GitHub is left as it is on the Worker.
       - name: Set Worker secrets
         run: |
@@ -72,8 +73,9 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_KEY }}
           TOKEN: ${{ secrets.TOKEN }}
           EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
-      - name: Email Routing rule
+      - name: Custom domain and Email Routing rule
         run: node scripts/setup.mjs email
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_KEY }}
+          DOMAIN: ${{ vars.DOMAIN || secrets.DOMAIN }}
           EMAIL_TO: ${{ vars.EMAIL_TO || secrets.EMAIL_TO }}

@@ -31,6 +31,7 @@
 		"AI_SPEAKER": "",
 		// iCloud link to the iOS Shortcut. Shows an "Add to share sheet" button on the status page.
 		"SHORTCUT_URL": "https://www.icloud.com/shortcuts/f463e3946d2b458a937e6a63fa85b45a"
+		// DOMAIN: a custom domain for the Worker, such as podchast.example.com. Set it as a GitHub variable. The deploy attaches it.
 		// EMAIL_TO: the address that Email Routing sends to this Worker. Set it as a GitHub variable.
 	}
 	// Secrets TOKEN and EMAIL_FROM: set them as GitHub secrets. The deploy copies them to the Worker.
