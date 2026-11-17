@@ -37,7 +37,7 @@ All settings live in GitHub: **Settings → Secrets and variables → Actions**.
 
 | Name | Kind | Use |
 | --- | --- | --- |
-| `EMAIL_TO` | Variable | The address that Podchast gets email at, for example `devour@podchast.example.com`. The status page shows it. If it is not set, the deploy does not set up email. See [Email in](#email-in). |
+| `EMAIL_TO` | Secret | The address that Podchast gets email at, for example `devour@podchast.example.com`. The status page shows it. If it is not set, the deploy does not set up email. See [Email in](#email-in). |
 | `EMAIL_FROM` | Secret | Senders that may email Podchast. Separate them with commas, spaces or new lines, in any mix. `@example.com` allows a whole domain. |
 | `VOICE` | Variable | Edge voice. Default `en-US-BrianNeural`. See [TTS engine](#tts-engine). |
 | `RATE` | Variable | Speech speed, for example `+10%`. Default `+0%`. |
@@ -48,7 +48,7 @@ All settings live in GitHub: **Settings → Secrets and variables → Actions**.
 | `TTS_ENGINE`, `EDGE_FORMAT`, `AI_MODEL`, `AI_SPEAKER` | Variable | TTS settings. See [TTS engine](#tts-engine). |
 | `CLOUDFLARE_ACCOUNT_ID` | Variable | Not needed in most cases: the deploy gets the account from the API token. Set it only if the token can see more than one Cloudflare account. |
 
-A variable that you put on the Secrets tab still works. Secrets must be on the Secrets tab: the deploy does not read `TOKEN`, `CLOUDFLARE_API_KEY` or `EMAIL_FROM` from variables, because variables show in the deploy log, and the log of a public repository is public. A secret that you do not set in GitHub is not changed on the Worker.
+A variable that you put on the Secrets tab still works, and it stays out of the deploy log. Use the Secrets tab for anything personal, such as `EMAIL_TO`. Secrets must be on the Secrets tab: the deploy does not read `TOKEN`, `CLOUDFLARE_API_KEY` or `EMAIL_FROM` from variables, because variables show in the deploy log, and the log of a public repository is public. A secret that you do not set in GitHub is not changed on the Worker.
 
 The deploy makes the R2 bucket `podchast`, the queue `podchast-jobs` and the R2 lifecycle rules, if they are missing. Later, each push to `main` deploys again.
 
@@ -88,7 +88,7 @@ Add `https://podchast.<your-subdomain>.workers.dev/<TOKEN>/noises.xml` as a feed
 Optional. You can email or forward things to Podchast. A short email with a link adds that link. A longer email becomes an episode, and its subject is the title. Each attached PDF becomes an episode. PDF links work too.
 
 1. In Cloudflare, go to **Email Routing** for your domain. Under **Settings → Subdomains**, add a subdomain such as `podchast.example.com`. This only adds MX records to the subdomain. Mail for the root domain is not changed.
-2. Set the GitHub variable `EMAIL_TO` to an address on that subdomain, such as `devour@podchast.example.com`.
+2. Set the GitHub secret `EMAIL_TO` to an address on that subdomain, such as `devour@podchast.example.com`.
 3. Set the GitHub secret `EMAIL_FROM` to your own email address (or several, separated by commas, spaces or new lines). Mail from other senders is rejected. If `EMAIL_FROM` is not set, all mail is rejected.
 4. Deploy again. The deploy adds the routing rule `EMAIL_TO` → **Send to a Worker** → `podchast`. For this, the API token also needs **Zone: Read** and **Email Routing Rules: Edit**. Without them, the deploy shows a warning, and you add the rule by hand in **Email Routing → Routing rules**.
 
