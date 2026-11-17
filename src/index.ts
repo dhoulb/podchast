@@ -299,10 +299,13 @@ function feedXml(env: Env, origin: string, items: Item[], file = FEED): string {
 					].filter(Boolean);
 			const plain = failed ? `BLEURGH! I could not eat this article. Stuck in my teeth: ${i.error ?? "a mystery bone"}. ${i.url}`.trim() : [i.excerpt, i.byline && `By ${i.byline}.`, i.url && `Source: ${i.url}`, facts.join(" · ")].filter(Boolean).join("\n\n");
 			const audio = failed ? `${base}/audio/${FAILED_ID}.mp3?for=${i.id}` : `${base}/audio/${i.id}.mp3${i.aired ? `?v=${Date.parse(i.aired)}` : ""}`;
+			// New audio gets a new GUID. Podcast apps match episodes by GUID, so an old GUID keeps
+			// the old episode's state (archived, played, deleted) and hides the new audio.
+			const guid = failed ? `${i.id}-spat` : i.aired ? `${i.id}-${Date.parse(i.aired)}` : i.id;
 			return `<item>
 <title>${esc(name)}</title>
 <link>${esc(i.url || base)}</link>
-<guid isPermaLink="false">${esc(i.id)}</guid>
+<guid isPermaLink="false">${esc(guid)}</guid>
 <pubDate>${new Date(i.aired ?? i.created).toUTCString()}</pubDate>
 <description>${esc(plain)}</description>
 <content:encoded><![CDATA[${notes.join("\n").replaceAll("]]>", "]]&gt;")}]]></content:encoded>
