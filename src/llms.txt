@@ -1,0 +1,78 @@
+# PODCHAST
+
+> PODCHAST turns web articles, PDFs and pasted text into a private podcast. A person sends a link (iOS Shortcut, bookmarklet, email, web form or an AI agent). One Cloudflare Worker gets the article, reads it aloud with Microsoft Edge "Read aloud" voices, and puts the MP3 in a private RSS feed. Audio expires after 90 days. The text stays forever, as a read-later archive. It runs on the Cloudflare Workers Free plan. It is open source: fork it, change it, deploy your own.
+
+This file is for AI agents. This instance runs at {{ORIGIN}}. In the URLs below, `<TOKEN>` is the owner's secret password. This file never contains it. If you do not have the token, ask the person. Never put the token in a public place.
+
+## Links
+
+- [Source code and README]({{REPO}}): full setup steps, settings, URLs and limits.
+- [README: Notes for robots]({{REPO}}#notes-for-robots): how to help a person set up their own PODCHAST, step by step, with the GitHub CLI.
+- [AGENTS.md]({{REPO}}/blob/main/AGENTS.md): rules and a map of the code for agents that change PODCHAST.
+- [Skill template]({{ORIGIN}}/SKILL.md): an agent skill that sends things to PODCHAST. Replace `<TOKEN>`.
+
+## Add things (the API)
+
+`POST {{ORIGIN}}/<TOKEN>/add`
+
+- A link: JSON `{"url": "https://..."}`, form field `url`, or a plain-text body.
+- Text: JSON `{"content": "...", "title": "..."}`. Markdown is fine, and headings become chapters. `title` is optional. `url` is optional and becomes the source link. Limit: 400,000 characters.
+- PDF links work. PODCHAST turns the PDF into text.
+- The token can also go in an `Authorization: Bearer <TOKEN>` header on `POST {{ORIGIN}}/add`.
+- The reply is plain text, or JSON `{"ok", "message", "id"}` if you send `Accept: application/json`. Success starts with "OM NOM NOM! SWALLOWED". 401 means a wrong token. A URL that is already in PODCHAST is not added again.
+- The episode is ready in 1 to 5 minutes. Long articles take longer.
+
+Example:
+
+```sh
+curl -sS -X POST "{{ORIGIN}}/<TOKEN>/add" -H 'Content-Type: application/json' -d '{"url":"https://example.com/article"}'
+```
+
+Write text for the ear: full sentences, no tables, no code blocks, no bare URLs. The voice reads them literally.
+
+## Other URLs
+
+- `GET /<TOKEN>`: the status page (tabs 🫦 MOUTH, 🕳️ ABYSS, 💥 NOISES).
+- `GET /<TOKEN>/noises.xml`: the podcast feed. Add it to a podcast app as a feed by URL.
+- `GET /<TOKEN>/SKILL.md`: the agent skill, with this instance's URL and token filled in.
+- `POST /<TOKEN>/retry/<id>`: make the audio again (♻️ RECHOMP).
+- `POST /<TOKEN>/delete/<id>`: delete an item. Ask the person first.
+- `GET /<id>`: a public page for one item (player, download, text). No token. Safe to share. Files: `/<id>.mp3`, `/<id>.md`, `/<id>.pdf`.
+- `GET /llms.txt`: this file.
+
+## Install the skill
+
+The 🫦 MOUTH tab of the status page has a 👾 ROBOTS section. It gives a SKILL.md with the URL and token filled in.
+
+- Claude (claude.ai or the desktop app): Settings, then Capabilities, then Skills. Upload the SKILL.md file.
+- Claude Code: save it as `~/.claude/skills/podchast/SKILL.md`.
+- Other agents: paste it into the custom instructions, or give it as a tool description. The agent needs a way to send an HTTP POST.
+
+Then say "podchast this" with a link or some text.
+
+## How it is built
+
+- One Cloudflare Worker, TypeScript, no runtime dependencies. `src/index.ts` has the routes, the status page, the feed and the queue consumer.
+- R2 bucket `podchast`: `items/<id>` (item JSON, kept forever), `read/<id>.md` and `read/<id>.pdf` (the text and original PDF, kept forever), `audio/<id>.mp3` and `audio/<id>.vtt` (deleted after `RETENTION_DAYS`, default 90).
+- Queue `podchast-jobs`, three kinds of job: prepare (get the article, cut it into 3,000-character chunks), chunk (speak one chunk into R2, 4 at a time), join (stream the chunks into one MP3 with ID3 chapters and a WebVTT transcript). Small jobs keep each one under the Free plan CPU and subrequest limits.
+- Article extraction: HTMLRewriter heuristics (`src/extract.ts`). Pages that need JavaScript or a login do not work. Some sites block Cloudflare.
+- Speech: Edge "Read aloud" over a WebSocket (`src/edge-tts.ts`, `src/edge-drm.ts`, a port of the edge-tts Python package). It is not an official API. A failed job retries up to 5 times. Workers AI is an optional fallback.
+- PDFs become text with Workers AI `toMarkdown`.
+- Email in (optional): Cloudflare Email Routing sends mail to the Worker `email()` handler (`src/mail.ts`). Only allowed senders are read.
+- Cron `17 3 * * *`: deletes old audio. The item stays as 🍖 MEAT (text only) and can be made into audio again.
+- Deploy: GitHub Actions (`.github/workflows/deploy.yml`) on each push to `main`. `scripts/setup.mjs` makes the R2 bucket, queue, lifecycle rules, custom domain and email rule. All settings are GitHub Actions secrets and variables. Nothing is set by hand in Cloudflare.
+
+## Make changes
+
+1. Fork the repository. Turn on Actions in the fork.
+2. Add the GitHub secrets `CLOUDFLARE_API_KEY` (a Cloudflare API token) and `TOKEN` (a random password, letters, numbers, `-` and `_`). See the README "Step by step".
+3. Change the code. `npm ci`, then `npm run check` (type check). `npm run dev` runs the Worker locally.
+4. Push to `main`. GitHub Actions deploys it.
+
+Easy changes with no code: GitHub variables `VOICE` (an Edge voice, such as `en-GB-RyanNeural`), `RATE`, `PITCH`, `FEED_TITLE`, `RETENTION_DAYS`, `DOMAIN` (a custom domain). Deploy again after a change.
+
+Keep secrets out of the repository, commits, issues and logs. Variables show in the public deploy log, so personal values go on the Secrets tab.
+
+## Words
+
+PODCHAST has its own words, in ALL CAPS with an emoji first: 🍖 DEVOUR (add), 🫦 MOUTH (where things go in), 🕳️ ABYSS (all items), 💥 NOISES (audio and feed), 🦷 CHEWING (making audio), 💥 NOISE (done), 🍖 MEAT (audio expired, text kept), 🤮 YUCK (failed), ♻️ RECHOMP (make audio again), 👾 ROBOTS (the agent skill).

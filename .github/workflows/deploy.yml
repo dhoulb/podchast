@@ -45,7 +45,7 @@ jobs:
       - name: Deploy
         run: |
           args=()
-          for name in FEED_TITLE RETENTION_DAYS VOICE RATE PITCH EDGE_FORMAT TTS_ENGINE AI_MODEL AI_SPEAKER SHORTCUT_URL EMAIL_TO DOMAIN; do
+          for name in FEED_TITLE RETENTION_DAYS VOICE RATE PITCH EDGE_FORMAT TTS_ENGINE AI_MODEL AI_SPEAKER SHORTCUT_URL EMAIL_TO DOMAIN REPO; do
             value="${!name}"
             [ -n "$value" ] && args+=(--var "$name:$value")
           done
@@ -64,6 +64,7 @@ jobs:
           SHORTCUT_URL: ${{ vars.SHORTCUT_URL || secrets.SHORTCUT_URL }}
           EMAIL_TO: ${{ vars.EMAIL_TO || secrets.EMAIL_TO }}
           DOMAIN: ${{ vars.DOMAIN || secrets.DOMAIN }}
+          REPO: ${{ github.server_url }}/${{ github.repository }}
       # Copy secrets to the Worker. A secret that is not set in GitHub is left as it is on the Worker.
       - name: Set Worker secrets
         run: |
