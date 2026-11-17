@@ -23,6 +23,8 @@
 		"RATE": "+0%",
 		// Edge prosody pitch, such as "-5%" or "-2Hz". Lower is calmer.
 		"PITCH": "-8%",
+		// Edge prosody volume, relative, such as "+50%". Edge speaks quite quietly by default.
+		"VOLUME": "+50%",
 		// Edge output format. 96 kbps sounds clearer than the 48 kbps default. Edge refuses 48 kHz / 192 kbps.
 		"EDGE_FORMAT": "audio-24khz-96kbitrate-mono-mp3",
 		// "edge-only" (default: Edge, and retry later if it fails), "edge" (Edge, then Workers AI if it fails) or "workers-ai".

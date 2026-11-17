@@ -79,6 +79,7 @@ All settings live in GitHub: **Settings → Secrets and variables → Actions**.
 | `VOICE` | Variable | Edge voice. Default `en-US-BrianNeural`. See [TTS engine](#tts-engine). |
 | `RATE` | Variable | Speech speed, for example `+10%`. Default `+0%`. |
 | `PITCH` | Variable | Voice pitch, for example `-5%`. Default `-8%`. |
+| `VOLUME` | Variable | Voice volume, relative, for example `+50%`. Default `+50%`. |
 | `SHORTCUT_URL` | Variable | iCloud link to your own copy of the iOS Shortcut. Default: the shared PODCHAST Shortcut. |
 | `DOMAIN` | Variable | Custom domain, for example `podchast.example.com`. See [Custom domain](#custom-domain). |
 | `FEED_TITLE` | Variable | Podcast name. Default `🍖 PODCHAST`. |
@@ -163,7 +164,7 @@ To change the voice, set the GitHub variable `VOICE`, then deploy again. Some go
 - `en-GB-RyanNeural`, `en-GB-SoniaNeural`, `en-GB-LibbyNeural`, `en-GB-ThomasNeural`
 - `en-US-AndrewMultilingualNeural`, `en-US-EmmaMultilingualNeural`, `en-US-BrianMultilingualNeural`, `en-US-AvaMultilingualNeural`
 
-Set these as GitHub variables too. `RATE` makes speech faster or slower, for example `+10%`. `PITCH` makes the voice lower or higher, for example `-5%`. `EDGE_FORMAT` changes the MP3 quality (default `audio-24khz-96kbitrate-mono-mp3`). `TTS_ENGINE` set to `workers-ai` uses only Workers AI.
+Set these as GitHub variables too. `RATE` makes speech faster or slower, for example `+10%`. `PITCH` makes the voice lower or higher, for example `-5%`. `VOLUME` makes it louder or quieter, for example `+50%`. `EDGE_FORMAT` changes the MP3 quality (default `audio-24khz-96kbitrate-mono-mp3`). `TTS_ENGINE` set to `workers-ai` uses only Workers AI.
 
 ### Custom domain
 

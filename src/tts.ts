@@ -10,7 +10,7 @@ import { chunkText } from "./extract";
 const EDGE_PARALLEL = 4;
 
 export type Engine = "edge" | "workers-ai";
-export type TtsEnv = { AI: Ai; VOICE: string; RATE?: string; PITCH?: string; AI_MODEL: string; AI_SPEAKER?: string; TTS_ENGINE?: string; EDGE_FORMAT?: string; EDGE_PAUSE_MS?: string };
+export type TtsEnv = { AI: Ai; VOICE: string; RATE?: string; PITCH?: string; VOLUME?: string; AI_MODEL: string; AI_SPEAKER?: string; TTS_ENGINE?: string; EDGE_FORMAT?: string; EDGE_PAUSE_MS?: string };
 
 async function retry<T>(fn: () => Promise<T>, tries = 3): Promise<T> {
 	let last: unknown;
@@ -37,6 +37,9 @@ export function isPermanent(e: unknown): boolean {
 /** Audio for each text chunk, in order. Chunk timings let the caller place chapter marks. cues[i] are the sentence times in chunk i, if the engine gives them. */
 export type Spoken = { chunks: string[]; audio: Pieces[]; cues?: Cue[][] };
 
+/** Edge options from the env vars. */
+const edgeOptions = (env: TtsEnv) => ({ voice: env.VOICE, rate: env.RATE, pitch: env.PITCH, volume: env.VOLUME, format: env.EDGE_FORMAT, pause: Number(env.EDGE_PAUSE_MS) || 0 });
+
 async function edgeAll(env: TtsEnv, text: string): Promise<Spoken> {
 	// Edge speaks at about 2 to 3 times real time per connection, so run a few parts at once.
 	const chunks = chunkText(text, 3000);
@@ -47,7 +50,7 @@ async function edgeAll(env: TtsEnv, text: string): Promise<Spoken> {
 		while (next < chunks.length) {
 			const i = next++;
 			const t = Date.now();
-			const out = await retry(() => edgeSynthesise(chunks[i], { voice: env.VOICE, rate: env.RATE, pitch: env.PITCH, format: env.EDGE_FORMAT, pause: Number(env.EDGE_PAUSE_MS) || 0 }), 3);
+			const out = await retry(() => edgeSynthesise(chunks[i], edgeOptions(env)), 3);
 			parts[i] = out.audio;
 			cues[i] = out.cues;
 			console.log(`Edge TTS part ${i + 1}/${chunks.length}: ${byteLength(parts[i])} bytes, ${cues[i].length} sentences in ${Date.now() - t} ms`);
@@ -88,7 +91,7 @@ export async function speakChunk(env: TtsEnv, text: string): Promise<{ mp3: Uint
 	};
 	if (env.TTS_ENGINE !== "workers-ai") {
 		try {
-			const r = await retry(() => edgeSynthesise(text, { voice: env.VOICE, rate: env.RATE, pitch: env.PITCH, format: env.EDGE_FORMAT, pause: Number(env.EDGE_PAUSE_MS) || 0 }), 2);
+			const r = await retry(() => edgeSynthesise(text, edgeOptions(env)), 2);
 			return out({ chunks: [text], audio: [r.audio], cues: [r.cues] }, "edge");
 		} catch (e) {
 			if (env.TTS_ENGINE === "edge-only") throw e;

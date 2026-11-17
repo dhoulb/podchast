@@ -29,7 +29,7 @@ export interface Env extends TtsEnv {
 // An item's audio is made in three steps. A job with only `id` reads the article and plans the chunks.
 // A job with `chunk` speaks one chunk. A job with `join` puts the chunks together into one episode.
 // `run` names one try of the whole item, so jobs from an older try do nothing.
-type Job = { id: string; run?: string; chunk?: number; join?: boolean; debug?: "edge" | "workers-ai" | "extract"; url?: string; force?: boolean; text?: string; format?: string; pause?: number; voice?: string; rate?: string; pitch?: string };
+type Job = { id: string; run?: string; chunk?: number; join?: boolean; debug?: "edge" | "workers-ai" | "extract"; url?: string; force?: boolean; text?: string; format?: string; pause?: number; voice?: string; rate?: string; pitch?: string; volume?: string };
 
 type Status = "queued" | "processing" | "done" | "failed";
 type Item = {
@@ -1000,7 +1000,7 @@ async function debugJob(env: Env, job: Job): Promise<void> {
 	const engine = job.debug as "edge" | "workers-ai";
 	const name = /^[\w-]{1,40}$/.test(job.id) ? job.id : engine;
 	const start = Date.now();
-	const report: Record<string, unknown> = { engine, voice: job.voice, rate: job.rate, pitch: job.pitch, format: job.format, pause: job.pause, at: new Date().toISOString() };
+	const report: Record<string, unknown> = { engine, voice: job.voice, rate: job.rate, pitch: job.pitch, volume: job.volume, format: job.format, pause: job.pause, at: new Date().toISOString() };
 	try {
 		const tts = { ...env, TTS_ENGINE: engine === "edge" ? "edge-only" : "workers-ai" };
 		if (job.format) tts.EDGE_FORMAT = job.format;
@@ -1009,6 +1009,7 @@ async function debugJob(env: Env, job: Job): Promise<void> {
 		// Prosody values, such as "-5%" or "-2Hz".
 		if (job.rate && /^[+-]\d{1,2}%$/.test(job.rate)) tts.RATE = job.rate;
 		if (job.pitch && /^[+-]\d{1,2}(%|Hz)$/.test(job.pitch)) tts.PITCH = job.pitch;
+		if (job.volume && /^[+-]\d{1,3}%$/.test(job.volume)) tts.VOLUME = job.volume;
 		const { mp3, engine: used } = await speak(tts, job.text || "Hello. This is a test of Podchast, running on Cloudflare.");
 		await env.AUDIO.put(`debug/${name}.mp3`, mp3, { httpMetadata: { contentType: "audio/mpeg" } });
 		// The first MP3 frame header: bytes 1 and 2 hold the bitrate and sample rate.
