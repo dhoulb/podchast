@@ -485,16 +485,17 @@ ${error ? `<p class="err">${esc(error)}</p>` : ""}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html{background:var(--bg);overflow-x:hidden;overscroll-behavior-y:none;touch-action:pan-y;-webkit-text-size-adjust:100%;text-size-adjust:100%}
 body{margin:0;min-height:100vh;font:15px/1.45 system-ui,-apple-system,sans-serif;color:var(--text);background:radial-gradient(120% 50% at 50% 0,#2a1208 0,transparent 70%) no-repeat,var(--bg);padding:0 16px calc(48px + env(safe-area-inset-bottom));overflow-x:hidden;max-width:100vw}
-body::before{content:"";position:fixed;z-index:20;top:0;left:0;right:0;height:var(--top);background:rgba(11,10,15,.85);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px)}
+body::before{content:"";position:fixed;z-index:20;top:0;left:0;right:0;height:var(--top);background:rgba(11,10,15,.85);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);opacity:0;pointer-events:none;transition:opacity .2s}
+.past::before{opacity:1}
 main{max-width:720px;margin:0 auto}main>*,section{min-width:0;max-width:100%}
 h1,h2,h3,.btn,.pill,.tabs a,summary{font-family:Fredoka,system-ui,sans-serif}
 a{color:var(--gold)}
 header.hero{position:relative;margin:0 -16px;max-width:none}
-header.hero img{display:block;width:100%;aspect-ratio:16/8;object-fit:cover;object-position:50% 35%;-webkit-mask-image:linear-gradient(#000 45%,transparent 96%);mask-image:linear-gradient(#000 45%,transparent 96%)}
+header.hero img{display:block;width:100%;height:calc(50vw + var(--top));object-fit:cover;object-position:50% 20%;-webkit-mask-image:linear-gradient(#000 45%,transparent 96%);mask-image:linear-gradient(#000 45%,transparent 96%)}
 header.hero>div{position:relative;margin-top:-58px;padding:0 20px}
 h1{margin:0;font-size:36px;font-weight:700;line-height:1;color:#fff;letter-spacing:.5px;text-shadow:0 0 28px rgba(255,107,44,.55),0 2px 0 rgba(0,0,0,.7)}
 #growl{margin:8px 0 0;color:var(--muted);font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase}
-@media (min-width:600px){h1{font-size:44px}header.hero img{aspect-ratio:2/1}}
+@media (min-width:600px){h1{font-size:44px}header.hero img{height:auto;aspect-ratio:2/1;object-position:50% 35%}}
 @media (min-width:752px){header.hero{margin:0}header.hero img{border-radius:0 0 24px 24px;-webkit-mask-image:linear-gradient(#000 45%,transparent 96%),linear-gradient(90deg,transparent,#000 10%,#000 90%,transparent);-webkit-mask-composite:source-in;mask-image:linear-gradient(#000 45%,transparent 96%),linear-gradient(90deg,transparent,#000 10%,#000 90%,transparent);mask-composite:intersect}}
 .tabs{position:sticky;top:calc(var(--top) + 8px);z-index:10;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));margin:18px 0 14px;padding:4px;background:rgba(26,23,34,.88);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);border:1px solid var(--line);border-radius:16px;box-shadow:0 10px 30px rgba(0,0,0,.45)}
 .tabs .ind{display:none;position:absolute;top:4px;bottom:4px;left:4px;width:calc((100% - 8px)/3);border-radius:12px;background:var(--gold);box-shadow:0 0 18px rgba(255,185,56,.35);transform:translateX(calc(var(--i,1)*100%));transition:transform .28s var(--out)}
@@ -612,6 +613,8 @@ var i=TABS.indexOf(id),was=TABS.indexOf(cur);document.querySelector(".tabs").sty
 document.querySelectorAll(".tab").forEach(function(t){t.classList.toggle("on",t.id===id)});document.querySelectorAll(".tabs a").forEach(function(a){a.setAttribute("aria-selected",a.getAttribute("href")==="#"+id)});
 var el=document.getElementById(id);if(cur&&cur!==id&&el.animate&&!RM)el.animate([{opacity:0,transform:"translateX("+(i>was?12:-12)+"px)"},{opacity:1,transform:"none"}],{duration:200,easing:OUT});cur=id}
 addEventListener("hashchange",show);show();
+// The status bar scrim shows only once the hero has scrolled away, so the Mimic's eyes stay visible at the top.
+var hero=document.querySelector(".hero");function past(){document.body.classList.toggle("past",!!hero&&hero.getBoundingClientRect().bottom<80)}addEventListener("scroll",past,{passive:true});past();
 document.querySelectorAll(".tabs a").forEach(function(a){a.addEventListener("click",function(e){e.preventDefault();history.replaceState(null,"",a.getAttribute("href"));show()})});
 // Cards come in one by one on the first load.
 [].slice.call(document.querySelectorAll("#list>li"),0,8).forEach(function(c,k){c.classList.add("new");c.style.animationDelay=k*30+"ms";setTimeout(function(){c.classList.remove("new");c.style.animationDelay=""},700+k*30)});
