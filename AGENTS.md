@@ -40,6 +40,7 @@ Still ask Dave before you:
 
 - Worker: `https://podchast.dhoulb.workers.dev`
 - Private routes start with `/<TOKEN>/`: status page, `noises.xml` (feed; `feed.xml` is an old alias), `add`, `audio/<id>.mp3`, `retry/<id>`, `delete/<id>`, `manifest.webmanifest`, `sw.js`, icons.
+- Public pages (no token): `/<id>` shows one item with the status page header, a player, a download link and the kept text. Files: `/<id>.mp3` (`?download` saves it), `/<id>.md`, `/<id>.pdf`. No actions. Never put the token on these pages. Each status card links to its page. `/<TOKEN>/read/<id>` redirects there.
 - Failed items show in the feed as "🤮 SPAT OUT: …" with one shared clip, `audio/failed-v3.mp3`, made on demand.
 - `TOKEN` is a Worker secret. Its source is the `TOKEN` GitHub Actions secret; each deploy copies it to Cloudflare. Never write it into the repo, commits, PRs or logs.
 
