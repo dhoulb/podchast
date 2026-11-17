@@ -6,7 +6,7 @@
 	"observability": { "enabled": true },
 	"workers_dev": true,
 	// Bundle the cover image as bytes.
-	"rules": [{ "type": "Data", "globs": ["**/*.jpg", "**/*.png"], "fallthrough": false }],
+	"rules": [{ "type": "Data", "globs": ["**/*.jpg", "**/*.png"], "fallthrough": false }, { "type": "Text", "globs": ["**/*.md", "**/*.txt"], "fallthrough": true }],
 	"r2_buckets": [{ "binding": "AUDIO", "bucket_name": "podchast" }],
 	"queues": {
 		"producers": [{ "binding": "JOBS", "queue": "podchast-jobs" }],
@@ -30,7 +30,9 @@
 		"AI_MODEL": "@cf/deepgram/aura-2-en",
 		"AI_SPEAKER": "",
 		// iCloud link to the iOS Shortcut. Shows an "Add to share sheet" button on the status page.
-		"SHORTCUT_URL": "https://www.icloud.com/shortcuts/f463e3946d2b458a937e6a63fa85b45a"
+		"SHORTCUT_URL": "https://www.icloud.com/shortcuts/f463e3946d2b458a937e6a63fa85b45a",
+		// Link to the source code, shown in /llms.txt. The deploy sets it to the GitHub repository it runs in.
+		"REPO": "https://github.com/dhoulb/podchast",
 		// DOMAIN: a custom domain for the Worker, such as podchast.example.com. Set it as a GitHub variable. The deploy attaches it.
 		// EMAIL_TO: the address that Email Routing sends to this Worker. Set it as a GitHub variable.
 	}

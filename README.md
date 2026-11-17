@@ -249,6 +249,8 @@ All private URLs contain the secret `TOKEN`. Keep them private.
 | `GET /<id>` | Public page for one item: player, download link and text. No token. `/<id>.mp3` (`?download`), `/<id>.md` and `/<id>.pdf` are its files. |
 | `POST /<TOKEN>/retry/<id>` | Try an item again from attempt 1 (♻️ RECHOMP). |
 | `POST /<TOKEN>/delete/<id>` | Delete an episode (the status page has a button). |
+| `GET /<TOKEN>/SKILL.md` | Agent skill with your URL and token in it (`?download` saves it). The 👾 ROBOTS section of the 🫦 MOUTH tab has it. Add it to Claude or another AI agent, then ask the agent to add things. |
+| `GET /llms.txt` | Notes for AI agents: what PODCHAST is, the API, how it is built and how to change it. No token. `/SKILL.md` is the skill with a `<TOKEN>` placeholder. |
 | `GET /<TOKEN>/manifest.webmanifest` | Web app manifest. Makes the status page a Home Screen app, and an Android share target. |
 
 ### Develop

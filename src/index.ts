@@ -3,6 +3,8 @@ import hero from "../assets/hero.jpg";
 import icon180 from "../assets/icon-180.png";
 import icon192 from "../assets/icon-192.png";
 import icon512 from "../assets/icon-512.png";
+import llms from "./llms.txt";
+import skillTemplate from "../skill/podchast/SKILL.md";
 import { type Article, chunkText, fetchArticle } from "./extract";
 import { readMail } from "./mail";
 import { concat } from "./edge-tts";
@@ -17,6 +19,7 @@ export interface Env extends TtsEnv {
 	FEED_TITLE: string;
 	RETENTION_DAYS: string;
 	SHORTCUT_URL?: string; // iCloud link to the iOS Shortcut, shown on the status page.
+	REPO?: string; // Link to the source code, for /llms.txt. The deploy sets it to the GitHub repository.
 	DOMAIN?: string; // Custom domain, such as podchast.example.com. Links use it, and pages on workers.dev go to it.
 	EMAIL_TO?: string; // Address that Email Routing sends to this Worker, shown on the status page.
 	EMAIL_FROM?: string; // Secret. Sender addresses (or @domains) allowed to email Podchast. Separate them with commas, spaces or new lines, in any mix.
@@ -468,6 +471,12 @@ var hero=document.querySelector(".hero");function past(){document.body.classList
 var GROWLS=["ARTICLES IN. NOISES OUT. OM NOM.","I AM A CHEST. I AM HUNGRY. THESE FACTS ARE RELATED.","FEED ME WORDS. I SPIT OUT PODCASTS. THIS IS SCIENCE.","I ATE A PAYWALL ONCE. IT WAS CRUNCHY.","NOM NOM NOM NOM NOM NOM NOM NOM.","DO NOT PUT YOUR HAND IN ME. PUT A LINK IN ME.","I HAVE TEETH WHERE MY LID SHOULD BE. WHAT OF IT.","YOU LOOK CRUNCHY. JUST AN OBSERVATION.","I DREAM OF LONGREADS. 10,000 WORDS. MMMMM."];
 var g=document.getElementById("growl");if(g&&Math.random()<0.75)g.textContent=GROWLS[Math.floor(Math.random()*GROWLS.length)];`;
 
+/** Put values into a {{NAME}} template. */
+const fill = (t: string, v: Record<string, string>) => t.replace(/\{\{(\w+)\}\}/g, (m, k: string) => v[k] ?? m);
+
+/** The agent skill. With the token for the status page and /<TOKEN>/SKILL.md, or with a <TOKEN> placeholder for the public template. */
+const skillMd = (env: Env, origin: string, token = "<TOKEN>") => fill(skillTemplate, { ORIGIN: origin, TOKEN: token, DAYS: String(retentionDays(env)) });
+
 function statusPage(env: Env, origin: string, items: Item[], note = ""): string {
 	const base = `${origin}/${env.TOKEN}`;
 	// A bookmark that sends the current page to /add, then shows this page.
@@ -612,6 +621,7 @@ ${heroHeader(env, title)}
 ${way("📱 iPhone and iPad", shortcut, true)}
 ${way("🌍 Browser", `<ol class="steps"><li>Show your bookmarks bar. In Chrome, press <b>⌘⇧B</b>.</li><li>DRAG the button below onto the bar.</li><li>On any article, click the bookmark. The page goes in my 🫦 MOUTH.</li></ol><div class="btns"><a class="btn drag" href="${esc(bookmarklet)}" onclick="event.preventDefault();this.textContent='DRAG ME. DO NOT POKE ME. 😤'">🍖 DEVOUR</a></div>`)}
 ${env.EMAIL_TO ? way("📧 Email", `<ol class="steps"><li>Send or forward anything to <b>${esc(env.EMAIL_TO)}</b>.</li><li>A link becomes its article. Longer text becomes an episode, and the subject is its title.</li><li>Attached PDFs become episodes too. I EAT PAPER.</li></ol><div class="btns">${copy("Copy email address 📧", env.EMAIL_TO, "btn alt")}</div>`) : ""}
+${way("👾 ROBOTS", `<p>Add this skill to your AI agent. Then you can add things to 🍖 PODCHAST by YELLING at it. "PODCHAST THIS!" I do not care who holds the spoon. OM.</p><ol class="steps"><li>Tap <b>Download SKILL.md</b>.</li><li>Claude: open <b>Settings → Capabilities → Skills</b> and upload it. Claude Code: save it as <code>~/.claude/skills/podchast/SKILL.md</code>.</li><li>Other robots: tap <b>Copy skill</b> and paste it into their instructions.</li></ol><p class="fine">The skill has your token in it. Feed it only to robots you trust. 🦷</p><div class="btns">${copy("Copy skill 👾", skillMd(env, origin, env.TOKEN), "btn alt")}<a class="btn" href="${esc(base)}/SKILL.md?download" download="SKILL.md">Download SKILL.md</a></div>`)}
 ${way("💻 Mac", `<ol class="steps"><li>The iPhone Shortcut syncs through iCloud. In Safari, use <b>Share → 🍖 DEVOUR</b>.</li><li>Want me in your Dock? In Safari, choose <b>File → Add to Dock</b>. I will sit there. Watching. Hungry.</li></ol>`)}
 ${way("🤖 Android", `<ol class="steps"><li>Open this page in Chrome.</li><li>Tap <b>Add to Home screen</b>.</li><li>Share any link to <b>PODCHAST</b>. I pay no rent. I eat links. OM.</li></ol>`)}
 </div>
@@ -883,6 +893,9 @@ async function handleFetch(req: Request, env: Env): Promise<Response> {
 
 	// Everything else lives under /<token>/...
 	// The artwork is public, with no token and no query string, so podcast apps' image servers can fetch it.
+	// Public docs for AI agents. They never contain the token.
+	if (url.pathname === "/llms.txt") return new Response(fill(llms, { ORIGIN: origin, REPO: env.REPO || "https://github.com/dhoulb/podchast" }), { headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "public, max-age=3600" } });
+	if (url.pathname === "/SKILL.md") return new Response(skillMd(env, origin), { headers: { "Content-Type": "text/markdown; charset=utf-8", "Cache-Control": "public, max-age=3600" } });
 	if (url.pathname === `/${COVER}`) return coverResponse();
 	if (url.pathname === `/${HERO}`) return new Response(hero, { headers: { "Content-Type": "image/jpeg", "Cache-Control": "public, max-age=31536000, immutable" } });
 	// Public pages: /<id>, and its files /<id>.mp3, /<id>.md, /<id>.pdf. They never use the token.
@@ -904,6 +917,11 @@ async function handleFetch(req: Request, env: Env): Promise<Response> {
 		if (!obj) return new Response("Not found", { status: 404 });
 		return new Response(obj.body, { headers: { "Content-Type": "text/vtt; charset=utf-8", "Access-Control-Allow-Origin": "*", "Cache-Control": "private, max-age=86400" } });
 	}
+	// The agent skill, with this instance's URL and token filled in. ?download saves it as a file.
+	if (a === "SKILL.md")
+		return new Response(skillMd(env, origin, env.TOKEN), {
+			headers: { "Content-Type": "text/markdown; charset=utf-8", "Cache-Control": "private, no-store", ...(url.searchParams.has("download") ? { "Content-Disposition": 'attachment; filename="SKILL.md"' } : {}) },
+		});
 	if (a === "manifest.webmanifest") return new Response(manifest(env), { headers: { "Content-Type": "application/manifest+json" } });
 	if (a === "sw.js") return new Response('self.addEventListener("fetch", () => {});', { headers: { "Content-Type": "text/javascript" } });
 	if (a === "icon-180.png") return png(icon180);
