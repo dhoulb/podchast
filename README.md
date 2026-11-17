@@ -1,6 +1,6 @@
-# Podchast
+# PODCHAST
 
-Podchast turns web articles into a private podcast. Share a link from your iPhone. A Cloudflare Worker gets the article, reads it aloud, and puts the MP3 in a private podcast feed. Audio goes away after 90 days. The text (and the original PDF) stays forever, so Podchast is also a permanent read-later list.
+PODCHAST turns web articles into a private podcast. Share a link from your iPhone. A Cloudflare Worker gets the article, reads it aloud, and puts the MP3 in a private podcast feed. Audio goes away after 90 days. The text (and the original PDF) stays forever, so PODCHAST is also a permanent read-later list.
 
 Everything runs on Cloudflare: Workers, Queues and R2. The Workers Free plan is enough.
 
@@ -15,7 +15,7 @@ You need a Cloudflare account, a GitHub account and a phone.
 3. **Deploy.** Open **Actions → Deploy → Run workflow**. The deploy makes everything in Cloudflare for you.
 4. **Open your status page** on your phone: `https://podchast.<your-subdomain>.workers.dev/<TOKEN>`. Tap **Add 🍖 DEVOUR shortcut**, and add the 💥 NOISES feed to your podcast app. Help: [iOS Shortcut](#ios-shortcut), [Podcast apps](#podcast-apps).
 
-Now share any article to Podchast. The episode is ready in a few minutes.
+Now share any article to PODCHAST. The episode is ready in a few minutes.
 
 ## Features and docs
 
@@ -37,12 +37,12 @@ All settings live in GitHub: **Settings → Secrets and variables → Actions**.
 
 | Name | Kind | Use |
 | --- | --- | --- |
-| `EMAIL_TO` | Secret | The address that Podchast gets email at, for example `devour@podchast.example.com`. The status page shows it. If it is not set, the deploy does not set up email. See [Email in](#email-in). |
-| `EMAIL_FROM` | Secret | Senders that may email Podchast. Separate them with commas, spaces or new lines, in any mix. `@example.com` allows a whole domain. |
+| `EMAIL_TO` | Secret | The address that PODCHAST gets email at, for example `devour@podchast.example.com`. The status page shows it. If it is not set, the deploy does not set up email. See [Email in](#email-in). |
+| `EMAIL_FROM` | Secret | Senders that may email PODCHAST. Separate them with commas, spaces or new lines, in any mix. `@example.com` allows a whole domain. |
 | `VOICE` | Variable | Edge voice. Default `en-US-BrianNeural`. See [TTS engine](#tts-engine). |
 | `RATE` | Variable | Speech speed, for example `+10%`. Default `+0%`. |
 | `PITCH` | Variable | Voice pitch, for example `-5%`. Default `-8%`. |
-| `SHORTCUT_URL` | Variable | iCloud link to your own copy of the iOS Shortcut. Default: the shared Podchast Shortcut. |
+| `SHORTCUT_URL` | Variable | iCloud link to your own copy of the iOS Shortcut. Default: the shared PODCHAST Shortcut. |
 | `FEED_TITLE` | Variable | Podcast name. Default `🍖 PODCHAST`. |
 | `RETENTION_DAYS` | Variable | Days to keep audio. Default `90`. The R2 lifecycle rule follows it. |
 | `TTS_ENGINE`, `EDGE_FORMAT`, `AI_MODEL`, `AI_SPEAKER` | Variable | TTS settings. See [TTS engine](#tts-engine). |
@@ -58,7 +58,7 @@ The deploy makes the R2 bucket `podchast`, the queue `podchast-jobs` and the R2 
 
 **Or make it yourself:**
 
-1. Open the **Shortcuts** app. Tap **+** to make a new shortcut. Name it **Podchast**.
+1. Open the **Shortcuts** app. Tap **+** to make a new shortcut. Name it **PODCHAST**.
 2. Tap the **i** (details) button. Turn on **Show in Share Sheet**. Close the details.
 3. At the top, set **Receive** to *URLs and Safari web pages* from *Share Sheet*. Set **If there is no input** to **Get Clipboard**.
 4. Add the action **Get Contents of URL**:
@@ -67,13 +67,13 @@ The deploy makes the R2 bucket `podchast`, the queue `podchast-jobs` and the R2 
    - Request Body: **JSON**. Add a field. Key `url`, type **Text**, value **Shortcut Input**.
    - You do not need headers. The token is in the URL.
 5. Add the action **Show Notification**. Set its text to **Contents of URL**.
-6. In Safari (or any app), tap **Share**, then **Podchast**. You see "Added to Podchast: …". The episode is ready in a few minutes.
+6. In Safari (or any app), tap **Share**, then **PODCHAST**. You see "Added to PODCHAST: …". The episode is ready in a few minutes.
 
 To share your own Shortcut: in the Shortcut, tap **i**, then **Setup**, and add an **Import Question** for the URL. Then long-press the Shortcut and tap **Share**, then **Copy iCloud Link**. The Import Question removes your token from the shared copy.
 
-**Android:** open the status page in Chrome and tap **Add to Home screen**. Podchast then shows in the Android share menu.
+**Android:** open the status page in Chrome and tap **Add to Home screen**. PODCHAST then shows in the Android share menu.
 
-**Mac:** Shortcuts sync through iCloud. The Podchast Shortcut shows in the **Share** menu in Safari on your Mac too.
+**Mac:** Shortcuts sync through iCloud. The PODCHAST Shortcut shows in the **Share** menu in Safari on your Mac too.
 
 ### Podcast apps
 
@@ -85,7 +85,7 @@ Add `https://podchast.<your-subdomain>.workers.dev/<TOKEN>/noises.xml` as a feed
 
 ### Email in
 
-Optional. You can email or forward things to Podchast. A short email with a link adds that link. A longer email becomes an episode, and its subject is the title. Each attached PDF becomes an episode. PDF links work too.
+Optional. You can email or forward things to PODCHAST. A short email with a link adds that link. A longer email becomes an episode, and its subject is the title. Each attached PDF becomes an episode. PDF links work too.
 
 1. In Cloudflare, go to **Email Routing** for your domain. Under **Settings → Subdomains**, add a subdomain such as `podchast.example.com`. This only adds MX records to the subdomain. Mail for the root domain is not changed.
 2. Set the GitHub secret `EMAIL_TO` to an address on that subdomain, such as `devour@podchast.example.com`.
