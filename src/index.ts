@@ -586,7 +586,6 @@ ul#list{list-style:none;padding:0;margin:0}
 .cf{display:flex;width:100%;margin:0 0 10px;padding:0;font:inherit;text-align:left;background:var(--bg2);border:1px solid var(--line);border-radius:12px;overflow:hidden;cursor:pointer;transition:transform .08s}
 .cf code{flex:1 1 auto;min-width:0;padding:13px 12px;border:0;background:none;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;overflow-wrap:normal}
 .cf .go{flex:none;display:flex;align-items:center;padding:0 14px;font:700 15px Fredoka,system-ui,sans-serif;color:var(--bg);background:var(--gold);transition:background .15s}
-.ico{width:18px;height:18px;flex:none;color:var(--gold)}
 .small{font-size:13px;font-weight:600;color:var(--muted)}
 .apps{margin:0}.apps div{padding:10px 0;border-top:1px solid var(--line)}.apps div:first-child{border-top:0;padding-top:0}.apps dt{font-weight:700}.apps dd{margin:2px 0 0;color:var(--muted)}.apps b{color:var(--text)}
 #ptr:empty{visibility:hidden}#ptr{position:fixed;z-index:30;left:50%;top:var(--top);transform:translate(-50%,-60px);pointer-events:none;font:700 15px Fredoka,system-ui,sans-serif;padding:7px 14px;border-radius:999px;border:1px solid var(--line);background:var(--card-hi);color:var(--gold);box-shadow:0 8px 24px rgba(0,0,0,.5);white-space:nowrap}
@@ -607,7 +606,7 @@ ${heroHeader(env, title)}
 <section id="mouth" class="tab">
 <p class="fine">Feed things into my 🫦 MOUTH. I store them in my 🕳️ ABYSS. Then you hear the 💥 NOISES. OM NOM.</p>
 <div class="panel"><h2>Add 🍖 MEAT</h2><form class="add" method="post" action="${esc(base)}/add"><input type="url" name="url" placeholder="https://… (PUT A LINK IN MY MOUTH)"><button class="btn">🍖 DEVOUR</button>
-<details><summary>…or SHOVEL A PILE OF TEXT AT ME <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><g transform="rotate(35 12 12)" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2.5h6M12 2.5v9"/><path d="M8 12h8v4.5a4 4 0 0 1-4 4.5 4 4 0 0 1-4-4.5z" fill="currentColor"/></g></svg></summary><input type="text" name="title" placeholder="Title (optional, I will guess)"><textarea name="content" rows="8" placeholder="Paste words. Markdown is fine. ## Headings become chapters. I EAT IT ALL."></textarea><button class="btn">🍖 DEVOUR</button></details></form></div>
+<details><summary>…or 🪏 SHOVEL a pile of text at me</summary><input type="text" name="title" placeholder="Title (optional, I will guess)"><textarea name="content" rows="8" placeholder="Paste words. Markdown is fine. ## Headings become chapters. I EAT IT ALL."></textarea><button class="btn">🍖 DEVOUR</button></details></form></div>
 <h2 class="sect">OTHER WAYS IN</h2>
 <div class="ways">
 ${way("📱 iPhone and iPad", shortcut, true)}
