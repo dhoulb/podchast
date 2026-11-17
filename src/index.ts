@@ -17,6 +17,7 @@ export interface Env extends TtsEnv {
 	FEED_TITLE: string;
 	RETENTION_DAYS: string;
 	SHORTCUT_URL?: string; // iCloud link to the iOS Shortcut, shown on the status page.
+	DOMAIN?: string; // Custom domain, such as podchast.example.com. Links use it, and pages on workers.dev go to it.
 	EMAIL_TO?: string; // Address that Email Routing sends to this Worker, shown on the status page.
 	EMAIL_FROM?: string; // Secret. Sender addresses (or @domains) allowed to email Podchast. Separate them with commas, spaces or new lines, in any mix.
 }
@@ -868,6 +869,11 @@ async function handleFetch(req: Request, env: Env): Promise<Response> {
 	const url = new URL(req.url);
 	const parts = url.pathname.split("/").filter(Boolean);
 	if (!env.TOKEN) return new Response("TOKEN secret is not set", { status: 500 });
+	// With a custom domain, all links use it. Pages opened on another host (workers.dev) go to the same path there.
+	// Other requests (the feed, audio, /add from the Shortcut) still work on every host.
+	const domain = env.DOMAIN?.trim().toLowerCase();
+	const origin = domain ? `https://${domain}` : url.origin;
+	if (domain && url.hostname !== domain && req.method === "GET" && wantsHtml(req)) return Response.redirect(origin + url.pathname + url.search, 302);
 
 	// POST /add (token in header, query or body) — used by the iOS Shortcut.
 	if (parts[0] === "add" && parts.length === 1) {
@@ -882,13 +888,13 @@ async function handleFetch(req: Request, env: Env): Promise<Response> {
 	if (url.pathname === `/${HERO}`) return new Response(hero, { headers: { "Content-Type": "image/jpeg", "Cache-Control": "public, max-age=31536000, immutable" } });
 	// Public pages: /<id>, and its files /<id>.mp3, /<id>.md, /<id>.pdf. They never use the token.
 	const pub = parts.length === 1 && !safeEqual(parts[0], env.TOKEN) ? parts[0].match(/^([a-z0-9]+-[0-9a-f]{8}(?:-p\d+)?)(?:\.(mp3|md|pdf))?$/) : null;
-	if (pub) return servePublic(env, req, url.origin, pub[1], pub[2]);
+	if (pub) return servePublic(env, req, origin, pub[1], pub[2]);
 	if (!parts.length || !safeEqual(parts[0], env.TOKEN)) return new Response("Not found", { status: 404 });
 	const [, a, b] = parts;
-	if (!a) return html(statusPage(env, url.origin, await withProgress(env, await listItems(env))));
+	if (!a) return html(statusPage(env, origin, await withProgress(env, await listItems(env))));
 	// noises.xml is the main feed URL. feed.xml still works for old subscriptions.
 	if (a === FEED || a === "feed.xml" || a === "feed")
-		return new Response(feedXml(env, url.origin, await listItems(env), a === "feed" ? "feed.xml" : a), {
+		return new Response(feedXml(env, origin, await listItems(env), a === "feed" ? "feed.xml" : a), {
 			headers: { "Content-Type": "application/rss+xml; charset=utf-8", "Cache-Control": "private, max-age=300" },
 		});
 	if (a === "cover.jpg" || a === "cover.png") return coverResponse();
@@ -906,9 +912,9 @@ async function handleFetch(req: Request, env: Env): Promise<Response> {
 	if (a === "icon-512.png") return png(icon512);
 	if (a === "delete" && b && b !== FAILED_ID && req.method === "POST") {
 		await env.AUDIO.delete([itemKey(b), audioKey(b), transcriptKey(b), partKey(b), readKey(b), pdfKey(b)]);
-		return Response.redirect(`${url.origin}/${env.TOKEN}`, 303);
+		return Response.redirect(`${origin}/${env.TOKEN}`, 303);
 	}
-	if (a === "read" && b) return serveRead(env, url.origin, b);
+	if (a === "read" && b) return serveRead(env, origin, b);
 	// Test clips from debug jobs, so they can be heard on a phone.
 	if (a === "debug" && b && /^[\w-]+\.mp3$/.test(b)) {
 		const obj = await env.AUDIO.get(`debug/${b}`);
@@ -921,13 +927,13 @@ async function handleFetch(req: Request, env: Env): Promise<Response> {
 		const bad = addProblem(add);
 		if (bad) return new Response(bad, { status: 400, headers: { "Content-Type": "text/plain; charset=utf-8" } });
 		const { same } = await addItem(env, add);
-		return html(statusPage(env, url.origin, await withProgress(env, await listItems(env)), same ? `${same} ${add.target}` : `OM NOM NOM! In my 🫦 MOUTH: ${add.content ? (add.title ?? "a big pile of text") : add.target} 😋 🦷 CHEWING soon.`));
+		return html(statusPage(env, origin, await withProgress(env, await listItems(env)), same ? `${same} ${add.target}` : `OM NOM NOM! In my 🫦 MOUTH: ${add.content ? (add.title ?? "a big pile of text") : add.target} 😋 🦷 CHEWING soon.`));
 	}
 	if (a === "retry" && b) {
 		const item = await loadItem(env, b);
 		if (!item) return new Response("Not found", { status: 404 });
 		await rechomp(env, item);
-		if (wantsHtml(req)) return Response.redirect(`${url.origin}/${env.TOKEN}`, 303);
+		if (wantsHtml(req)) return Response.redirect(`${origin}/${env.TOKEN}`, 303);
 		return Response.json({ ok: true });
 	}
 	return new Response("Not found", { status: 404 });

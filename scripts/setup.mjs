@@ -1,8 +1,8 @@
 // Makes the Cloudflare resources that Podchast needs.
 // The deploy workflow runs `node scripts/setup.mjs` before `wrangler deploy` (account, bucket, queue, lifecycle),
-// and `node scripts/setup.mjs email` after it (Email Routing rule, which needs the Worker to exist).
+// and `node scripts/setup.mjs email` after it (custom domain and Email Routing rule, which need the Worker to exist).
 // Each step is safe to run again: it only adds what is missing.
-// Needs CLOUDFLARE_API_TOKEN. Optional: CLOUDFLARE_ACCOUNT_ID, RETENTION_DAYS, EMAIL_TO.
+// Needs CLOUDFLARE_API_TOKEN. Optional: CLOUDFLARE_ACCOUNT_ID, RETENTION_DAYS, DOMAIN, EMAIL_TO.
 // Writes CLOUDFLARE_ACCOUNT_ID to $GITHUB_ENV, so the next steps (wrangler) use the same account.
 
 import { appendFileSync } from "node:fs";
@@ -107,19 +107,40 @@ if (!email) await step("R2 lifecycle rules", async () => {
 	return `set (audio ${days + 1} days, parts 31 days, chunks 7 days)`;
 });
 
-// 5. Email Routing rule: EMAIL_TO → this Worker. Email Routing must already be on for the domain or subdomain.
+// The zone (domain in this account) that a host name is in: podchast.example.com → example.com.
+async function findZone(host) {
+	const parts = host.split(".");
+	for (let i = 0; i < parts.length - 1; i++) {
+		const { result } = await cf("GET", `/zones?name=${parts.slice(i).join(".")}&account.id=${account}`);
+		if (result[0]) return result[0];
+	}
+	throw new Error(`No zone for ${host} in this account (or the token cannot read zones).`);
+}
+
+// 5. Custom domain: DOMAIN → this Worker. Cloudflare makes the DNS record and the certificate.
+// The domain must be a zone in this account. The host name must not have an A, AAAA or CNAME record already (MX and TXT are fine).
+// The API token needs "Zone: Read" and "Workers Routes: Edit" (the "Edit Cloudflare Workers" template has both). Without them, this step only warns.
+const domain = (process.env.DOMAIN ?? "").trim().toLowerCase();
+if (email && !domain) console.log("Custom domain: skipped (DOMAIN is not set)");
+if (email && domain) {
+	await step(`Custom domain ${domain}`, async () => {
+		const { result } = await cf("GET", `${acc}/workers/domains?hostname=${encodeURIComponent(domain)}`);
+		const hit = result.find((d) => d.hostname === domain);
+		if (hit?.service === WORKER) return "exists";
+		if (hit) throw new Error(`${domain} is attached to the ${hit.service} Worker. Remove it in the dashboard.`);
+		const zone = await findZone(domain);
+		await cf("PUT", `${acc}/workers/domains`, { hostname: domain, service: WORKER, zone_id: zone.id, environment: "production" });
+		return "made";
+	});
+}
+
+// 6. Email Routing rule: EMAIL_TO → this Worker. Email Routing must already be on for the domain or subdomain.
 // The API token needs "Zone: Read" and "Email Routing Rules: Edit". Without them, this step only warns.
 const to = (process.env.EMAIL_TO ?? "").trim().toLowerCase();
 if (email && !to) console.log("Email rule: skipped (EMAIL_TO is not set)");
 if (email && to) {
 	await step(`Email rule ${to}`, async () => {
-		const parts = to.split("@")[1]?.split(".") ?? [];
-		let zone;
-		for (let i = 0; i < parts.length - 1 && !zone; i++) {
-			const { result } = await cf("GET", `/zones?name=${parts.slice(i).join(".")}&account.id=${account}`);
-			zone = result[0];
-		}
-		if (!zone) throw new Error(`No zone for ${to} in this account (or the token cannot read zones).`);
+		const zone = await findZone(to.split("@")[1] ?? "");
 		const { result } = await cf("GET", `/zones/${zone.id}/email/routing/rules?per_page=50`);
 		const hit = result.find((r) => r.matchers?.some((m) => m.field === "to" && m.value?.toLowerCase() === to));
 		if (hit) {

@@ -38,7 +38,8 @@ Still ask Dave before you:
 
 ## URLs
 
-- Worker: `https://podchast.dhoulb.workers.dev`
+- Worker: `https://podchast.dhoulb.com` (custom domain, GitHub variable `DOMAIN`). `https://podchast.dhoulb.workers.dev` still works.
+- With `DOMAIN` set, all links use the domain, and HTML pages opened on another host redirect (302) to it. The feed, audio and `/add` are served on every host. The deploy (`scripts/setup.mjs email`) attaches the domain. The host name shares MX and TXT records with Email Routing; it must have no A, AAAA or CNAME record.
 - Private routes start with `/<TOKEN>/`: status page, `noises.xml` (feed; `feed.xml` is an old alias), `add`, `audio/<id>.mp3`, `retry/<id>`, `delete/<id>`, `manifest.webmanifest`, `sw.js`, icons.
 - Public pages (no token): `/<id>` shows one item with the status page header, a player, a download link and the kept text. Files: `/<id>.mp3` (`?download` saves it), `/<id>.md`, `/<id>.pdf`. No actions. Never put the token on these pages. Each status card links to its page. `/<TOKEN>/read/<id>` redirects there.
 - Failed items show in the feed as "🤮 SPAT OUT: …" with one shared clip, `audio/failed-v3.mp3`, made on demand.

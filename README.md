@@ -22,6 +22,7 @@ Now share any article to PODCHAST. The episode is ready in a few minutes.
 - [Settings](#settings)
 - [iOS Shortcut](#ios-shortcut)
 - [Podcast apps](#podcast-apps)
+- [Custom domain](#custom-domain)
 - [Email in](#email-in)
 - [How it works](#how-it-works)
 - [TTS engine](#tts-engine)
@@ -43,6 +44,7 @@ All settings live in GitHub: **Settings → Secrets and variables → Actions**.
 | `RATE` | Variable | Speech speed, for example `+10%`. Default `+0%`. |
 | `PITCH` | Variable | Voice pitch, for example `-5%`. Default `-8%`. |
 | `SHORTCUT_URL` | Variable | iCloud link to your own copy of the iOS Shortcut. Default: the shared PODCHAST Shortcut. |
+| `DOMAIN` | Variable | Custom domain, for example `podchast.example.com`. See [Custom domain](#custom-domain). |
 | `FEED_TITLE` | Variable | Podcast name. Default `🍖 PODCHAST`. |
 | `RETENTION_DAYS` | Variable | Days to keep audio. Default `90`. The R2 lifecycle rule follows it. |
 | `TTS_ENGINE`, `EDGE_FORMAT`, `AI_MODEL`, `AI_SPEAKER` | Variable | TTS settings. See [TTS engine](#tts-engine). |
@@ -126,6 +128,18 @@ To change the voice, set the GitHub variable `VOICE`, then deploy again. Some go
 - `en-US-AndrewMultilingualNeural`, `en-US-EmmaMultilingualNeural`, `en-US-BrianMultilingualNeural`, `en-US-AvaMultilingualNeural`
 
 Set these as GitHub variables too. `RATE` makes speech faster or slower, for example `+10%`. `PITCH` makes the voice lower or higher, for example `-5%`. `EDGE_FORMAT` changes the MP3 quality (default `audio-24khz-96kbitrate-mono-mp3`). `TTS_ENGINE` set to `workers-ai` uses only Workers AI.
+
+### Custom domain
+
+PODCHAST works on `workers.dev` with no domain. To use your own domain:
+
+1. Add the domain to your Cloudflare account. A subdomain such as `podchast.example.com` is fine.
+2. Make sure that the host name has no A, AAAA or CNAME record. MX and TXT records for [Email in](#email-in) are fine.
+3. Set the GitHub variable `DOMAIN` to the host name, for example `podchast.example.com`. Then deploy.
+
+The deploy attaches the domain to the Worker. Cloudflare makes the DNS record and the certificate. The API token needs **Zone: Read** and **Workers Routes: Edit** (the **Edit Cloudflare Workers** template has both).
+
+When `DOMAIN` is set, all links (feed, status page, share links) use it. Pages that you open on `workers.dev` go to the same page on the domain. The feed, audio and `/add` still work on `workers.dev`, so old feed and Shortcut URLs keep working.
 
 ### URLs
 
