@@ -104,8 +104,8 @@ Optional. You can email or forward things to PODCHAST. A short email with a link
    Every article is one episode, however long it is. Each job does a small amount of work, so it stays under the Free plan CPU limit.
 6. `GET /<TOKEN>/noises.xml` shows the finished items as a podcast feed.
 7. If an article fails 5 times, the feed gets a short "🤮 SPAT OUT: …" episode. Its notes give the reason.
-8. The consumer keeps the article text in `read/<id>.md`, and the original PDF in `read/<id>.pdf`. These files stay forever. `GET /<TOKEN>/read/<id>` shows the text as a page.
-9. A daily cron deletes audio after 90 days. An R2 lifecycle rule (91 days) is the backup. The item stays on the status page as "🍖 MEAT", with a **Read** button. **Re-chomp** makes the audio again from the kept text.
+8. The consumer keeps the article text in `read/<id>.md`, and the original PDF in `read/<id>.pdf`. These files stay forever. The public page `/<id>` shows the text, with a player while the audio lasts. It has no token, so it is safe to 📮 SHARE.
+9. A daily cron deletes audio after 90 days. An R2 lifecycle rule (91 days) is the backup. The item stays on the status page as "🍖 MEAT", and its public page still shows the text. **♻️ RECHOMP** makes the audio again from the kept text.
 
 ### TTS engine
 
@@ -140,7 +140,8 @@ All private URLs contain the secret `TOKEN`. Keep them private.
 | `GET /<TOKEN>/noises.xml` | Podcast feed. Add this to your podcast app. `feed.xml` is the old name and still works. |
 | `GET /cover-v5.jpg` | Podcast artwork (`assets/cover.jpg`, 1400x1400). Public, so podcast apps can fetch it. |
 | `GET /<TOKEN>/audio/<id>.mp3` | Episode audio (supports range requests). |
-| `POST /<TOKEN>/retry/<id>` | Try an item again from attempt 1 (Re-chomp). |
+| `GET /<id>` | Public page for one item: player, download link and text. No token. `/<id>.mp3` (`?download`), `/<id>.md` and `/<id>.pdf` are its files. |
+| `POST /<TOKEN>/retry/<id>` | Try an item again from attempt 1 (♻️ RECHOMP). |
 | `POST /<TOKEN>/delete/<id>` | Delete an episode (the status page has a button). |
 | `GET /<TOKEN>/manifest.webmanifest` | Web app manifest. Makes the status page a Home Screen app, and an Android share target. |
 

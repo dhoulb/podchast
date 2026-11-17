@@ -486,11 +486,11 @@ function statusPage(env: Env, origin: string, items: Item[], note = ""): string 
 			const p = v.state === "chewing" && i.chunks && i.progress ? Math.min(1, i.progress.done / i.chunks) : undefined;
 			const teeth = v.state === "chewing" ? `<div class="teeth${p === undefined ? " any" : ""}"${p === undefined ? "" : ` style="--p:${p.toFixed(3)}"`}></div>` : "";
 			const acts = [
-				i.url && `<a class="chip" href="${esc(i.url)}">Source</a>`,
+				i.url && `<a class="chip" href="${esc(i.url)}">🔗 SOURCE</a>`,
 				i.pdf && `<a class="chip" href="${esc(`${base}/read/${rootId(i.id)}.pdf`)}">PDF</a>`,
-				v.state !== "chewing" && v.state !== "waiting" && `<form method="post" action="${esc(`${base}/retry/${i.id}`)}" data-act="retry"><button class="chip">Re-chomp</button></form>`,
-				`<button type="button" class="chip i share" data-share="/${esc(i.id)}" data-title="${esc(i.title || i.url || "Some text")}" aria-label="Share" title="Share">📮</button>`,
-				`<form class="del" method="post" action="${esc(`${base}/delete/${i.id}`)}" data-act="delete" onsubmit="return confirm('DELETE this one? Forever? No take-backs??')"><button class="chip del" aria-label="Delete" title="Delete">🗑️</button></form>`,
+				v.state !== "chewing" && v.state !== "waiting" && `<form method="post" action="${esc(`${base}/retry/${i.id}`)}" data-act="retry"><button class="chip">♻️ RECHOMP</button></form>`,
+				`<button type="button" class="chip i share" data-share="/${esc(i.id)}" data-title="${esc(i.title || i.url || "Some text")}" aria-label="SHARE" title="📮 SHARE">📮</button>`,
+				`<form class="del" method="post" action="${esc(`${base}/delete/${i.id}`)}" data-act="delete" onsubmit="return confirm('DELETE this one? Forever? No take-backs??')"><button class="chip del" aria-label="DELETE" title="🗑️ DELETE">🗑️</button></form>`,
 			].filter(Boolean);
 			return `<li class="card" data-k="${esc(i.id)}" data-s="${v.state}">
 <div class="row"><span class="pill"><span class="e">${emoji}</span>${word}</span>${v.step ? `<span class="step">${esc(v.step)}</span>` : ""}</div>
@@ -619,7 +619,7 @@ ${way("🤖 Android", `<ol class="steps"><li>Open this page in Chrome.</li><li>T
 <section id="abyss" class="tab">
 ${note ? `<div class="panel note">${esc(note)}</div>` : ""}
 <div id="sum" class="sum">${summary(views)}</div>
-<p class="fine">💥 NOISES fade after ${retentionDays(env)} days. 🍖 MEAT (the words) stays FOREVER. Re-chomp it to hear it again.</p>
+<p class="fine">💥 NOISES fade after ${retentionDays(env)} days. 🍖 MEAT (the words) stays FOREVER. ♻️ RECHOMP it to hear it again.</p>
 <ul id="list">${rows || `<li class="card empty" data-k="empty">My 🕳️ ABYSS is EMPTY. I AM SO HUNGRY. I could eat a WHOLE NEWSLETTER. Go to <a href="#mouth">🫦 MOUTH</a> and feed me before I eat the CSS. 🫥</li>`}</ul>
 </section>
 <section id="noises" class="tab">
@@ -668,7 +668,7 @@ function toast(t){draw(t);ptr.style.transform="translate(-50%,16px)";clearTimeou
 document.addEventListener("submit",function(e){var f=e.target,act=f.dataset&&f.dataset.act,li=f.closest("li");if(!act||!li||e.defaultPrevented||!window.fetch)return;e.preventDefault();
 var k=li.dataset.k,ok=function(r){if(!r.ok)throw new Error("HTTP "+r.status)},fail=function(err){delete gone[k];document.body.classList.add("ease");toast("🤮 "+err.message);refresh().catch(function(){})};
 if(act==="delete"){gone[k]=1;chomp(li).then(badge);fetch(f.action,{method:"POST"}).then(ok).catch(fail);return}
-var b=f.querySelector("button");b.textContent="Chomping…";b.disabled=true;fetch(f.action,{method:"POST",headers:{Accept:"application/json"}}).then(ok).then(refresh).catch(fail)});
+var b=f.querySelector("button");b.textContent="♻️ CHOMPING…";b.disabled=true;fetch(f.action,{method:"POST",headers:{Accept:"application/json"}}).then(ok).then(refresh).catch(fail)});
 // Pull to refresh, for the Home Screen app (it has no reload button).
 var ptr=document.getElementById("ptr"),y0=null,pull=0,GO=70;
 function draw(text){ptr.textContent=text||(pull>=GO?"🦷 LET GO. I CHOMP.":pull?"⬇️ PULL TO CHOMP":"");ptr.style.transform="translate(-50%,"+(pull-60)+"px)";document.querySelector("main").style.transform=pull?"translateY("+pull+"px)":""}
@@ -742,7 +742,7 @@ function publicPage(env: Env, origin: string, i: Item | null, md: string | null)
 		: playable
 			? `<audio controls preload="metadata" src="${esc(mp3)}"></audio><a class="btn" href="${esc(`/${i.id}.mp3?download`)}" download="${esc(fileName(i))}.mp3">Download MP3</a>`
 			: `<p class="none">${esc(noAudio[v!.state])}</p>`;
-	const links = i ? [`<button type="button" class="chip share" data-share="/${esc(i.id)}" data-title="${esc(title)}">📮 SHARE</button>`, i.url && `<a class="chip" href="${esc(i.url)}">Source</a>`, i.pdf && `<a class="chip" href="${esc(`/${i.id}.pdf`)}">PDF</a>`, md && `<a class="chip" href="${esc(`/${i.id}.md`)}">Markdown</a>`].filter(Boolean) : [];
+	const links = i ? [`<button type="button" class="chip share" data-share="/${esc(i.id)}" data-title="${esc(title)}">📮 SHARE</button>`, i.url && `<a class="chip" href="${esc(i.url)}">🔗 SOURCE</a>`, i.pdf && `<a class="chip" href="${esc(`/${i.id}.pdf`)}">PDF</a>`, md && `<a class="chip" href="${esc(`/${i.id}.md`)}">Markdown</a>`].filter(Boolean) : [];
 	const body = md ? markdownToHtml(md.replace(/^#\s+.+\n+/, "")) : i?.excerpt ? `<p>${esc(i.excerpt)}</p>` : "";
 	const art = i?.image || `${origin}/${COVER}`;
 	const desc = i?.excerpt || (md ?? "").replace(/^#.*$/gm, "").replace(/\s+/g, " ").trim().slice(0, 200);
