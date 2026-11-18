@@ -29,7 +29,7 @@ export interface Env extends TtsEnv {
 // An item's audio is made in three steps. A job with only `id` reads the article and plans the chunks.
 // A job with `chunk` speaks one chunk. A job with `join` puts the chunks together into one episode.
 // `run` names one try of the whole item, so jobs from an older try do nothing.
-type Job = { id: string; run?: string; chunk?: number; join?: boolean; debug?: "edge" | "workers-ai" | "extract"; url?: string; force?: boolean; text?: string; format?: string; pause?: number; voice?: string; rate?: string; pitch?: string; volume?: string };
+type Job = { id: string; run?: string; chunk?: number; join?: boolean; debug?: "edge" | "workers-ai" | "extract"; url?: string; force?: boolean; text?: string; format?: string; pause?: number; voice?: string; rate?: string; pitch?: string; volume?: string; clarify?: boolean };
 
 type Status = "queued" | "processing" | "done" | "failed";
 type Item = {
@@ -1000,11 +1000,13 @@ async function debugJob(env: Env, job: Job): Promise<void> {
 	const engine = job.debug as "edge" | "workers-ai";
 	const name = /^[\w-]{1,40}$/.test(job.id) ? job.id : engine;
 	const start = Date.now();
-	const report: Record<string, unknown> = { engine, voice: job.voice, rate: job.rate, pitch: job.pitch, volume: job.volume, format: job.format, pause: job.pause, at: new Date().toISOString() };
+	const report: Record<string, unknown> = { engine, clarify: job.clarify !== false, voice: job.voice, rate: job.rate, pitch: job.pitch, volume: job.volume, format: job.format, pause: job.pause, at: new Date().toISOString() };
 	try {
 		const tts = { ...env, TTS_ENGINE: engine === "edge" ? "edge-only" : "workers-ai" };
 		if (job.format) tts.EDGE_FORMAT = job.format;
 		if (job.pause !== undefined) tts.EDGE_PAUSE_MS = String(job.pause);
+		// clarify: false speaks the text as it is, for "before" clips of a clarification.
+		if (job.clarify === false) tts.CLARIFY = "off";
 		if (job.voice && /^[\w-]+$/.test(job.voice)) tts.VOICE = job.voice;
 		// Prosody values, such as "-5%" or "-2Hz".
 		if (job.rate && /^[+-]\d{1,2}%$/.test(job.rate)) tts.RATE = job.rate;

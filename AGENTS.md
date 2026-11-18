@@ -31,6 +31,7 @@ Still ask Dave before you:
 - `/add` takes a `url`, or `content` (text or markdown) with an optional `title`. Text is kept in `read/<id>.md` (`item.text` is set).
 - Queue `podchast-jobs`, three kinds of job. Prepare (`{id}`): gets the article and plans 3,000-character chunks (`CHUNK_CHARS`). Chunk (`{id, run, chunk}`): speaks one chunk into R2. Join (`{id, run, join}`): queued by the last chunk; streams the chunks into one MP3 with chapters and the VTT. Every article is one episode. `run` names one try, so jobs from an older try do nothing. Chunk jobs do not save the item; the status page counts the chunk files.
 - Cron `17 3 * * *`: deletes old audio and marks those items `gone`.
+- Clarifications: `src/clarifications.ts` rewrites text that Edge reads badly ("1-2x", "i.e.", slashes, emoji, Roman numeral headings) just before each Edge request. See `docs/clarifications.md`.
 - TTS: Microsoft Edge "Read aloud" voices over a WebSocket (`src/edge-tts.ts`, `src/edge-drm.ts`). Edge refuses SSML `<break>`, so a chunk job speaks each paragraph, heading and divider section in its own request (at most 12) and puts silent MP3 frames between them (`segments()` and `silence()` in `src/tts.ts`; markers `HEADING` and `DIVIDER` in the script). Edge only by default (`TTS_ENGINE=edge-only`): a failed job retries later, up to 5 attempts (`MAX_ATTEMPTS`, and `max_retries` 4 in `wrangler.jsonc`). Workers AI `@cf/deepgram/aura-2-en` is an optional fallback (`TTS_ENGINE=edge`, `src/tts.ts`).
 - Article extraction: HTMLRewriter heuristics (`src/extract.ts`).
 - Status page: server-rendered HTML in `statusPage()`. Dark only. Each card has `data-s=<state>`, and the CSS sets the card colour `--c` from it. Its inline script gets the page again every 60 seconds and on pull to refresh, and swaps only the changed cards (`#list li[data-k]`) and the summary chips (`#sum`). Removed cards leave with the `chomp()` animation. Re-chomp and Delete use `fetch()`; the forms still work without JavaScript.
@@ -72,11 +73,20 @@ Podchast has its own words. In all UI and copy, write a keyword in ALL CAPS, wit
 
 Plain labels stay plain: PDF, Download MP3. "Vom" means content the system cannot eat. Do not use it for adding.
 
+## Docs
+
+Read the doc before you work on its subject.
+
+| File | What it is | Read it when |
+| --- | --- | --- |
+| `docs/clarifications.md` | The text rewrites before Edge TTS (`src/clarifications.ts`), what Edge reads badly, pause lengths, and the research process: debug clips, Whisper speech to text, comparing transcripts, measuring silences. | Dave reports a word or pause that sounds wrong, you add or change a rule, or you test a new voice or TTS engine. |
+
 ## Commands
 
 ```sh
 npm ci
 npm run check            # Type check (CI runs this on every PR)
+npm test                 # Clarification rule tests (CI runs this too)
 npm run dev              # Local Worker
 cd test && npx wrangler dev --local --port 8799   # Extractor harness
 curl -X POST --data-binary @fixture.html http://127.0.0.1:8799/
@@ -87,6 +97,8 @@ curl http://127.0.0.1:8787/seed                             # then open http://1
 When you change the status page, screenshot it with Playwright at iPhone and desktop widths.
 
 When you change `src/extract.ts`, run the harness on all `test/fixture*.html` files.
+
+When you change `src/clarifications.ts`, follow `docs/clarifications.md`.
 
 ## Deploy
 
