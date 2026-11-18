@@ -5,7 +5,7 @@
 //   CLOUDFLARE_API_TOKEN=... PODCHAST_TOKEN=... node --experimental-strip-types scripts/clarification-clips.mjs [id ...]
 //
 // Optional: CLOUDFLARE_ACCOUNT_ID, ORIGIN (default https://podchast.dhoulb.com), VOICE (test another voice).
-// Each clip is a queue debug job: {id, debug: "edge", text, pause: 0, clarify}. The Worker saves debug/<id>.mp3,
+// Each clip is a queue debug job: {id, debug: "edge", text, pause: 0, clarify, lang}. The Worker saves debug/<id>.mp3,
 // served at /<TOKEN>/debug/<id>.mp3.
 import { mkdirSync, writeFileSync } from "node:fs";
 import { CLARIFICATIONS } from "../src/clarifications.ts";
@@ -35,8 +35,8 @@ const jobs = rules.flatMap((c) => {
 	// Debug text is read as markdown, so a heading rule gets a heading.
 	const text = c.heading ? `## ${c.before}` : c.before;
 	return [
-		{ rule: c.id, side: "before", body: { id: `cl-${stamp}-${c.id}-b`.slice(0, 40), debug: "edge", text, pause: 0, clarify: false, voice: process.env.VOICE } },
-		{ rule: c.id, side: "after", body: { id: `cl-${stamp}-${c.id}-a`.slice(0, 40), debug: "edge", text, pause: 0, clarify: true, voice: process.env.VOICE } },
+		{ rule: c.id, side: "before", body: { id: `cl-${stamp}-${c.id}-b`.slice(0, 40), debug: "edge", text, pause: 0, clarify: false, lang: c.lang, voice: process.env.VOICE } },
+		{ rule: c.id, side: "after", body: { id: `cl-${stamp}-${c.id}-a`.slice(0, 40), debug: "edge", text, pause: 0, clarify: true, lang: c.lang, voice: process.env.VOICE } },
 	];
 });
 await cf("POST", `/accounts/${account}/queues/${queue.queue_id}/messages/batch`, { messages: jobs.map((j) => ({ body: j.body })) });

@@ -30,7 +30,7 @@ export interface Env extends TtsEnv {
 // An item's audio is made in three steps. A job with only `id` reads the article and plans the chunks.
 // A job with `chunk` speaks one chunk. A job with `join` puts the chunks together into one episode.
 // `run` names one try of the whole item, so jobs from an older try do nothing.
-type Job = { id: string; run?: string; chunk?: number; join?: boolean; debug?: "edge" | "workers-ai" | "extract"; url?: string; force?: boolean; text?: string; format?: string; pause?: number; voice?: string; rate?: string; pitch?: string; volume?: string; clarify?: boolean; notes?: boolean };
+type Job = { id: string; run?: string; chunk?: number; join?: boolean; debug?: "edge" | "workers-ai" | "extract"; url?: string; force?: boolean; text?: string; format?: string; pause?: number; voice?: string; rate?: string; pitch?: string; volume?: string; clarify?: boolean; lang?: string; notes?: boolean };
 
 type Status = "queued" | "processing" | "done" | "failed";
 type Item = {
@@ -52,6 +52,7 @@ type Item = {
 	parts?: number;
 	words?: number;
 	image?: string; // Article image (og:image), used as episode art.
+	lang?: string; // Language of the page, such as "en-GB" (from <html lang>, og:locale or Content-Language). The clarifications use it.
 	chapters?: number;
 	text?: boolean; // Made from text sent to /add, not from a web page.
 	saved?: boolean; // A copy of the text is kept forever in read/<id>.md.
@@ -89,7 +90,7 @@ const rootId = (id: string) => id.replace(/-p\d+$/, "");
 // chunks/<id>/<run>/<n>.mp3     The audio of chunk n. <n>.json has its length and sentence times.
 // The join job deletes them. A lifecycle rule deletes any that are left after 7 days.
 const chunkDir = (id: string, run: string) => `chunks/${id}/${run}/`;
-type Plan = { chunks: string[]; headings: string[]; again: boolean };
+type Plan = { chunks: string[]; headings: string[]; again: boolean; lang?: string };
 type ChunkMeta = { seconds: number; bytes: number; cues?: Cue[]; engine: string; edgeError?: string };
 
 async function getJson<T>(env: Env, key: string): Promise<T | null> {
@@ -1030,13 +1031,15 @@ async function debugJob(env: Env, job: Job): Promise<void> {
 	const engine = job.debug as "edge" | "workers-ai";
 	const name = /^[\w-]{1,40}$/.test(job.id) ? job.id : engine;
 	const start = Date.now();
-	const report: Record<string, unknown> = { engine, clarify: job.clarify !== false, voice: job.voice, rate: job.rate, pitch: job.pitch, volume: job.volume, format: job.format, pause: job.pause, at: new Date().toISOString() };
+	const report: Record<string, unknown> = { engine, clarify: job.clarify !== false, lang: job.lang, voice: job.voice, rate: job.rate, pitch: job.pitch, volume: job.volume, format: job.format, pause: job.pause, at: new Date().toISOString() };
 	try {
 		const tts = { ...env, TTS_ENGINE: engine === "edge" ? "edge-only" : "workers-ai" };
 		if (job.format) tts.EDGE_FORMAT = job.format;
 		if (job.pause !== undefined) tts.EDGE_PAUSE_MS = String(job.pause);
 		// clarify: false speaks the text as it is, for "before" clips of a clarification.
 		if (job.clarify === false) tts.CLARIFY = "off";
+		// lang: the article language for the clarifications, such as "en-US".
+		if (job.lang && /^[a-z]{2,3}(-[\w]{2,8})*$/i.test(job.lang)) tts.LANG = job.lang;
 		if (job.voice && /^[\w-]+$/.test(job.voice)) tts.VOICE = job.voice;
 		// Prosody values, such as "-5%" or "-2Hz".
 		if (job.rate && /^[+-]\d{1,2}%$/.test(job.rate)) tts.RATE = job.rate;
@@ -1175,7 +1178,7 @@ async function prepareJob(env: Env, job: Job, attempt: number): Promise<void> {
 		item.words = text.split(/\s+/).filter((w) => w && w !== DIVIDER).length;
 		const chunks = chunkText(script, CHUNK_CHARS);
 		const run = crypto.randomUUID().slice(0, 8);
-		const plan: Plan = { chunks, headings, again };
+		const plan: Plan = { chunks, headings, again, lang: item.lang };
 		await env.AUDIO.put(`${chunkDir(item.id, run)}plan.json`, JSON.stringify(plan), { httpMetadata: { contentType: "application/json" } });
 		item.run = run;
 		item.chunks = chunks.length;
@@ -1200,7 +1203,7 @@ async function chunkJob(env: Env, job: Job, attempt: number): Promise<void> {
 	const plan = await getJson<Plan>(env, `${dir}plan.json`);
 	if (!plan) return;
 	try {
-		const r = await speakChunk(env, plan.chunks[n]);
+		const r = await speakChunk({ ...env, LANG: plan.lang }, plan.chunks[n]);
 		await env.AUDIO.put(`${dir}${n}.mp3`, r.mp3, { httpMetadata: { contentType: "audio/mpeg" } });
 		const meta: ChunkMeta = { seconds: r.seconds, bytes: r.mp3.length, cues: r.cues, engine: r.engine, edgeError: r.edgeError };
 		await env.AUDIO.put(`${dir}${n}.json`, JSON.stringify(meta), { httpMetadata: { contentType: "application/json" } });
@@ -1347,6 +1350,7 @@ async function loadArticle(env: Env, item: Item): Promise<PartText> {
 	item.title = art.title;
 	item.byline = art.byline ?? item.byline;
 	item.site = art.site ?? item.site;
+	item.lang = art.lang ?? item.lang;
 	item.excerpt = art.excerpt ?? item.excerpt ?? art.text.slice(0, 300);
 	const image = art.image ?? item.image;
 	item.image = image && image.length <= 400 ? image : undefined;
