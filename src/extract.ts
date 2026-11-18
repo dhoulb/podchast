@@ -1,3 +1,5 @@
+import { cleanLinks, type Link } from "./notes";
+
 // Article extraction with HTMLRewriter (built into Workers, no dependencies).
 // A light "Readability" heuristic: collect text blocks, note which container
 // each block sits in (articleBody / article / main / page chrome), then keep
@@ -12,6 +14,7 @@ export type Article = {
 	lang?: string;
 	image?: string; // og:image, absolute URL
 	headings?: string[]; // Heading paragraphs, exactly as they appear in `text`
+	links?: Link[]; // Links in the kept paragraphs, in order
 };
 
 const UAS = [
@@ -48,7 +51,7 @@ export async function fetchArticle(url: string, pdf?: (bytes: ArrayBuffer, url: 
 	return extractArticle(resp, resp.url || url);
 }
 
-type Block = { tag: string; text: string; body: boolean; article: boolean; main: boolean; chrome: boolean };
+type Block = { tag: string; text: string; body: boolean; article: boolean; main: boolean; chrome: boolean; links?: Link[] };
 
 const BLOCKS = "p, h1, h2, h3, h4, h5, h6, li, blockquote, dd";
 // React streaming puts late HTML in <div hidden id="S:0"> and moves it into the page with a script (X articles do this). That is not chrome.
@@ -69,6 +72,7 @@ export async function extractArticle(resp: Response, url: string): Promise<Artic
 	let plain = "";
 	const blocks: Block[] = [];
 	let cur: Block | null = null;
+	let link: Link | null = null; // The <a> we are inside, if it is in a block.
 
 	// One element can match several counters (e.g. <svg aria-hidden="true"> is both chrome and skip).
 	// An element has only one end tag handler: each onEndTag() call replaces the last one.
@@ -149,10 +153,30 @@ export async function extractArticle(resp: Response, url: string): Promise<Artic
 				} catch {}
 			},
 		})
+		// Registered last, so `open` already holds the counters that this <a> opened. This end tag handler
+		// replaces theirs, so it closes them too.
+		.on("a[href]", {
+			element(el) {
+				if (!cur || depth.skip > 0 || depth.table > 0) return;
+				const l: Link = { url: decodeEntities(el.getAttribute("href") ?? "").trim(), text: "" };
+				(cur.links ??= []).push(l);
+				link = l;
+				const keys = open;
+				try {
+					el.onEndTag(() => {
+						for (const k of keys) depth[k]--;
+						if (link === l) link = null;
+					});
+				} catch {
+					link = null;
+				}
+			},
+		})
 		.onDocument({
 			text(t) {
 				if (depth.title > 0) titleTag += t.text;
 				else if (depth.skip === 0) {
+					if (link && depth.table === 0) link.text += t.text;
 					if (cur && depth.table === 0) cur.text += t.text;
 					if (depth.chrome === 0 && depth.page > 0) plain += t.text;
 				}
@@ -200,6 +224,12 @@ export async function extractArticle(resp: Response, url: string): Promise<Artic
 	const tail = kept.findIndex((t, i) => i >= kept.length * 0.6 && TAIL_START.test(t));
 	const paras = tail > 0 ? kept.slice(0, tail) : kept;
 	const text = paras.join("\n\n");
+	// Links from the blocks we kept. A heading's text got a full stop above.
+	const keptText = new Set(paras);
+	const links = cleanLinks(
+		chosen.filter((b) => keptText.has(b.text) || keptText.has(`${b.text}.`)).flatMap((b) => (b.links ?? []).map((l) => ({ url: l.url, text: decodeEntities(l.text) }))),
+		url,
+	);
 	if (text.length < 200) {
 		const count = (f: (b: Block) => boolean) => blocks.filter(f).length;
 		const stats = { depth, blocks: blocks.length, p: count((b) => b.tag === "p"), chrome: count((b) => b.chrome), body: count((b) => b.body), article: count((b) => b.article), main: count((b) => b.main), long: count((b) => b.text.length >= 30), tags: [...new Set(blocks.slice(0, 40).map((b) => `${b.tag}${b.chrome ? "*" : ""}:${b.text.length}`))].join(" ") };
@@ -215,6 +245,7 @@ export async function extractArticle(resp: Response, url: string): Promise<Artic
 		lang,
 		image: absUrl(meta["og:image"] || meta["twitter:image"], url),
 		headings: paras.filter((t) => isHeading.has(t) && t.length <= 200),
+		links,
 	};
 }
 
