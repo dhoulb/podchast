@@ -1,5 +1,6 @@
 // Status page preview with sample items. Run: cd test/preview && npx wrangler dev --local, open /seed, then /devtoken/.
 import worker from "../../src/index";
+import { notesMeta } from "../../src/notes";
 let now = 0;
 const iso = (minsAgo: number) => new Date(now - minsAgo * 60_000).toISOString();
 const mk = (): any[] => [
@@ -19,6 +20,9 @@ export default {
       now = Date.now(); const items = mk();
       for (const i of items) await env.AUDIO.put(`items/${i.id}`, JSON.stringify(i), { customMetadata: { item: JSON.stringify(i) } });
       for (const i of items) if (i.saved) await env.AUDIO.put(`read/${i.id}.md`, `# ${i.title}\n\nThe first paragraph sets the scene. It has *some emphasis*, a [link](https://example.com) and **bold words**.\n\n## A heading\n\nAnother paragraph, a bit longer, so the reading width shows. The night sky was dark again, and people came out to look.\n\n> A quote from someone wise.\n\n- One point\n- Another point\n`);
+      // Show notes (sections and links) for one done item, as saveNotes() writes them.
+      const notes = { chapters: [{ title: "How a small town learned to love the night sky again", start: 0 }, { title: "A heading", start: 74.2 }, { title: "The dark sky park", start: 845 }, { title: "What comes next", start: 3725 }], links: [{ url: "https://www.darksky.org/our-work/conservation/idsp/", text: "International Dark Sky Places" }, { url: "https://en.wikipedia.org/wiki/Light_pollution", text: "light pollution" }, { url: "https://example.com/a/really/long/path/without/any/link/text/at/all/that/goes/on/and/on", text: "" }] };
+      await env.AUDIO.put("notes/mhxyz003-00000003.json", JSON.stringify(notes), { customMetadata: { notes: notesMeta(notes) } });
       for (let n = 0; n < 5; n++) await env.AUDIO.put(`chunks/mhxyz001-00000001/r1/${n}.json`, "{}");
       return new Response("seeded");
     }

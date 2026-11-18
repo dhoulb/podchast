@@ -8,7 +8,8 @@ import skillTemplate from "../skill/podchast/SKILL.md";
 import { type Article, chunkText, fetchArticle } from "./extract";
 import { readMail } from "./mail";
 import { concat } from "./edge-tts";
-import { type Chapter, id3Tag } from "./id3";
+import { type Chapter, id3Tag, readChapters } from "./id3";
+import { cleanLinks, type Link, linkHost, linkLabel, markdownLinks, type Notes, type NotesMeta, notesHtml, notesMeta, notesText, parseNotesMeta } from "./notes";
 import { CHUNK_CHARS, chunkTimes, chunkVtt, DIVIDER, HEADING, isPermanent, mp3Duration, speak, speakChunk, type TtsEnv } from "./tts";
 import type { Cue } from "./edge-tts";
 
@@ -29,7 +30,7 @@ export interface Env extends TtsEnv {
 // An item's audio is made in three steps. A job with only `id` reads the article and plans the chunks.
 // A job with `chunk` speaks one chunk. A job with `join` puts the chunks together into one episode.
 // `run` names one try of the whole item, so jobs from an older try do nothing.
-type Job = { id: string; run?: string; chunk?: number; join?: boolean; debug?: "edge" | "workers-ai" | "extract"; url?: string; force?: boolean; text?: string; format?: string; pause?: number; voice?: string; rate?: string; pitch?: string; volume?: string; clarify?: boolean };
+type Job = { id: string; run?: string; chunk?: number; join?: boolean; debug?: "edge" | "workers-ai" | "extract"; url?: string; force?: boolean; text?: string; format?: string; pause?: number; voice?: string; rate?: string; pitch?: string; volume?: string; clarify?: boolean; notes?: boolean };
 
 type Status = "queued" | "processing" | "done" | "failed";
 type Item = {
@@ -79,6 +80,8 @@ const itemKey = (id: string) => `items/${id}`;
 const partKey = (id: string) => `parts/${id}.txt`;
 const readKey = (id: string) => `read/${id}.md`;
 const pdfKey = (id: string) => `read/${id}.pdf`;
+// notes/<id>.json  Show notes: section times and links. Kept forever. customMetadata has what fits in 2 KB, for the feed.
+const notesKey = (id: string) => `notes/${id}.json`;
 // Part 2 of an article shares the text of part 1.
 const rootId = (id: string) => id.replace(/-p\d+$/, "");
 
@@ -132,6 +135,26 @@ async function listItems(env: Env): Promise<Item[]> {
 		cursor = page.truncated ? page.cursor : undefined;
 	} while (cursor);
 	return items.sort((a, b) => b.created.localeCompare(a.created));
+}
+
+async function loadNotes(env: Env, id: string): Promise<Notes> {
+	return (await getJson<Notes>(env, notesKey(id))) ?? {};
+}
+
+async function saveNotes(env: Env, id: string, notes: Notes): Promise<void> {
+	await env.AUDIO.put(notesKey(id), JSON.stringify(notes), { httpMetadata: { contentType: "application/json" }, customMetadata: { notes: notesMeta(notes) } });
+}
+
+/** The notes of every episode, from one list() call, for the feed. */
+async function listNotes(env: Env): Promise<Map<string, NotesMeta>> {
+	const out = new Map<string, NotesMeta>();
+	let cursor: string | undefined;
+	do {
+		const page = await env.AUDIO.list({ prefix: "notes/", include: ["customMetadata"], cursor, limit: 1000 });
+		for (const o of page.objects) out.set(o.key.slice(6, -5), parseNotesMeta(o.customMetadata?.notes));
+		cursor = page.truncated ? page.cursor : undefined;
+	} while (cursor);
+	return out;
 }
 
 const retentionDays = (env: Env) => Number(env.RETENTION_DAYS) || 90;
@@ -279,7 +302,7 @@ function hms(sec = 0): string {
 	return [h, m, s].map((n) => String(n).padStart(2, "0")).join(":");
 }
 
-function feedXml(env: Env, origin: string, items: Item[], file = FEED): string {
+function feedXml(env: Env, origin: string, items: Item[], file = FEED, allNotes = new Map<string, NotesMeta>()): string {
 	const base = `${origin}/${env.TOKEN}`;
 	const about = esc(`${growl(retentionDays(env))}\n\nFeed my 🫦 MOUTH here: ${base}`);
 	const title = env.FEED_TITLE || "Podchast";
@@ -294,6 +317,7 @@ function feedXml(env: Env, origin: string, items: Item[], file = FEED): string {
 			const facts = failed
 				? []
 				: [i.words && `${i.words.toLocaleString("en-GB")} words`, i.duration && `${Math.round(i.duration / 60)} min`, i.chapters && `${i.chapters} chapters`].filter(Boolean);
+			const extra = allNotes.get(i.id);
 			const notes = failed
 				? [`<p>BLEURGH. I CHOMPED this article and it tasted like RUSTY NAILS. I SPAT IT OUT. 🤮</p>`, `<p>What got stuck in my teeth: ${esc(i.error ?? "a mystery bone")}</p>`, i.url && `<p><a href="${esc(i.url)}">Look at the thing I could not eat</a></p>`, `<p>Feed it to me again to retry.</p>`].filter(Boolean)
 				: [
@@ -302,8 +326,9 @@ function feedXml(env: Env, origin: string, items: Item[], file = FEED): string {
 						i.saved && `<p><a href="${esc(`${origin}/${i.id}`)}">Read the words</a></p>`,
 						i.url && `<p><a href="${esc(i.url)}">Read the article</a>${i.site ? ` on ${esc(i.site)}` : ""}</p>`,
 						facts.length && `<p>${esc(facts.join(" · "))}</p>`,
+						...(extra ? notesHtml(extra, `${origin}/${i.id}#links`) : []),
 					].filter(Boolean);
-			const plain = failed ? `BLEURGH! I could not eat this article. Stuck in my teeth: ${i.error ?? "a mystery bone"}. ${i.url}`.trim() : [i.excerpt, i.byline && `By ${i.byline}.`, i.url && `Source: ${i.url}`, facts.join(" · ")].filter(Boolean).join("\n\n");
+			const plain = failed ? `BLEURGH! I could not eat this article. Stuck in my teeth: ${i.error ?? "a mystery bone"}. ${i.url}`.trim() : [i.excerpt, i.byline && `By ${i.byline}.`, i.url && `Source: ${i.url}`, facts.join(" · "), extra && notesText(extra)].filter(Boolean).join("\n\n");
 			const audio = failed ? `${base}/audio/${FAILED_ID}.mp3?for=${i.id}` : `${base}/audio/${i.id}.mp3${i.aired ? `?g=${Date.parse(i.aired)}` : ""}`; // Apps may match episodes by enclosure URL too, so it changes with the GUID.
 			// New audio gets a new GUID. Podcast apps match episodes by GUID, so an old GUID keeps
 			// the old episode's state (archived, played, deleted) and hides the new audio.
@@ -731,14 +756,14 @@ async function servePublic(env: Env, req: Request, origin: string, id: string, e
 		const type = ext === "pdf" ? "application/pdf" : "text/markdown; charset=utf-8";
 		return new Response(obj.body, { headers: { "Content-Type": type, "Content-Disposition": `inline; filename="${fileName(item)}.${ext}"`, "Cache-Control": "public, max-age=3600" } });
 	}
-	const md = item.saved ? await (await env.AUDIO.get(readKey(root)))?.text() : undefined;
-	return html(publicPage(env, origin, item, md ?? null));
+	const [md, notes] = await Promise.all([item.saved ? (async () => (await env.AUDIO.get(readKey(root)))?.text())() : undefined, loadNotes(env, id)]);
+	return html(publicPage(env, origin, item, md ?? null, notes.links ?? []));
 }
 
 /** A safe file name from the title, such as "how-to-do-great-work". */
 const fileName = (i: Item) => (i.title ?? "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80) || i.id;
 
-function publicPage(env: Env, origin: string, i: Item | null, md: string | null): string {
+function publicPage(env: Env, origin: string, i: Item | null, md: string | null, mentioned: Link[] = []): string {
 	const v = i && view(i);
 	const title = i ? (i.title || md?.match(/^#\s+(.+)$/m)?.[1] || i.url || "Some text").trim() : "NOTHING HERE";
 	const date = i && new Date(i.created).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
@@ -789,6 +814,10 @@ article blockquote{margin:1em 0;padding-left:16px;border-left:3px solid var(--li
 article pre{white-space:pre-wrap;font-size:14px;background:var(--bg2);border:1px solid var(--line);padding:12px;border-radius:10px}
 article code{font:15px ui-monospace,SFMono-Regular,Menlo,monospace}
 article li{margin:.3em 0}article img,article table{max-width:100%}article table{display:block;overflow-x:auto}
+.mentioned{margin:36px 4px 0;padding-top:18px;border-top:1px solid var(--line)}
+.mentioned h3{margin:0 0 10px;font:600 20px Fredoka,system-ui,sans-serif}
+.mentioned ol{margin:0;padding-left:24px;display:grid;gap:8px;overflow-wrap:anywhere}
+.mentioned a{color:var(--gold)}.mentioned span{color:var(--dim);font-size:13px;margin-left:4px}
 footer{margin:40px 4px 0;color:var(--dim);font:600 12px Fredoka,system-ui,sans-serif;letter-spacing:.08em}
 </style></head><body><main>
 ${heroHeader(env, "🍖 PODCHAST")}
@@ -796,6 +825,7 @@ ${heroHeader(env, "🍖 PODCHAST")}
 ${links.length ? `<div class="links">${links.join("")}</div>` : ""}</section>
 <section class="pod" data-s="${v?.state ?? "stuck"}">${player}</section>
 ${body ? `<article>${body}</article>` : ""}
+${mentioned.length ? `<section class="mentioned" id="links"><h3>Links</h3><ol>${mentioned.map((l) => `<li><a href="${esc(l.url)}">${esc(linkLabel(l))}</a>${l.text ? ` <span>${esc(linkHost(l.url))}</span>` : ""}</li>`).join("")}</ol></section>` : ""}
 <footer>CHEWED BY 🍖 PODCHAST. OM NOM.</footer>
 </main><script>${HERO_JS}${SHARE_JS}</script></body></html>`;
 }
@@ -914,7 +944,7 @@ async function handleFetch(req: Request, env: Env): Promise<Response> {
 	if (!a) return html(statusPage(env, origin, await withProgress(env, await listItems(env))));
 	// noises.xml is the main feed URL. feed.xml still works for old subscriptions.
 	if (a === FEED || a === "feed.xml" || a === "feed")
-		return new Response(feedXml(env, origin, await listItems(env), a === "feed" ? "feed.xml" : a), {
+		return new Response(feedXml(env, origin, ...(await Promise.all([listItems(env), a === "feed" ? "feed.xml" : a, listNotes(env)]))), {
 			headers: { "Content-Type": "application/rss+xml; charset=utf-8", "Cache-Control": "private, max-age=300" },
 		});
 	if (a === "cover.jpg" || a === "cover.png") return coverResponse();
@@ -936,7 +966,7 @@ async function handleFetch(req: Request, env: Env): Promise<Response> {
 	if (a === "icon-192.png") return png(icon192);
 	if (a === "icon-512.png") return png(icon512);
 	if (a === "delete" && b && b !== FAILED_ID && req.method === "POST") {
-		await env.AUDIO.delete([itemKey(b), audioKey(b), transcriptKey(b), partKey(b), readKey(b), pdfKey(b)]);
+		await env.AUDIO.delete([itemKey(b), audioKey(b), transcriptKey(b), partKey(b), readKey(b), pdfKey(b), notesKey(b)]);
 		return Response.redirect(`${origin}/${env.TOKEN}`, 303);
 	}
 	if (a === "read" && b) return serveRead(env, origin, b);
@@ -1052,9 +1082,42 @@ async function debugExtract(env: Env, id: string, url: string): Promise<void> {
 	await env.AUDIO.put(`debug/extract-${id}.json`, JSON.stringify(report, null, 1));
 }
 
+/** Make the show notes of an older item again, without making the audio again. Links: from the kept
+ * markdown, or from the web page again. Sections: from the chapter tag at the start of the MP3. */
+async function notesJob(env: Env, id: string): Promise<void> {
+	const item = await loadItem(env, id);
+	if (!item) return;
+	const notes = await loadNotes(env, id);
+	if (!notes.links?.length) {
+		const md = await (await env.AUDIO.get(readKey(rootId(id))))?.text();
+		let links = md ? markdownLinks(md) : [];
+		// Kept text from a web page has no links in it, so get the page again (not a PDF).
+		if (!links.length && item.url && !item.text && !item.pdf) links = (await fetchArticle(item.url).catch(() => null))?.links ?? [];
+		notes.links = cleanLinks(links, item.url || undefined);
+	}
+	if (!notes.chapters && item.status === "done" && !item.gone && item.chapters) {
+		const first = await env.AUDIO.get(audioKey(id), { range: { offset: 0, length: 10 } });
+		if (first && "body" in first) {
+			const h = new Uint8Array(await first.arrayBuffer());
+			const size = ((h[6] & 0x7f) << 21) | ((h[7] & 0x7f) << 14) | ((h[8] & 0x7f) << 7) | (h[9] & 0x7f);
+			const tag = h[0] === 0x49 ? await env.AUDIO.get(audioKey(id), { range: { offset: 0, length: 10 + size } }) : null;
+			const chapters = tag && "body" in tag ? readChapters(new Uint8Array(await tag.arrayBuffer())) : [];
+			if (chapters.length >= 2) notes.chapters = chapters;
+		}
+	}
+	await saveNotes(env, id, notes);
+}
+
+/** Queue a notes job for every item in the feed. Send {"id":"*","notes":true} to the queue to run it. */
+async function notesAllJob(env: Env): Promise<void> {
+	const ids = (await listItems(env)).filter((i) => i.status === "done" && !i.gone).map((i) => i.id);
+	for (let i = 0; i < ids.length; i += 100) await env.JOBS.sendBatch(ids.slice(i, i + 100).map((id) => ({ body: { id, notes: true } })));
+}
+
 async function processJob(env: Env, job: Job, attempt: number): Promise<void> {
 	if (job.debug === "extract") return debugExtract(env, job.id, job.url ?? "");
 	if (job.debug) return debugJob(env, job);
+	if (job.notes) return job.id === "*" ? notesAllJob(env) : notesJob(env, job.id);
 	if (job.chunk !== undefined) return chunkJob(env, job, attempt);
 	if (job.join) return joinJob(env, job, attempt);
 	return prepareJob(env, job, attempt);
@@ -1228,6 +1291,7 @@ async function joinJob(env: Env, job: Job, attempt: number): Promise<void> {
 			item.aired = new Date().toISOString();
 		}
 		await saveItem(env, item);
+		await saveNotes(env, item.id, { ...(await loadNotes(env, item.id)), chapters: chapters.length >= 2 ? chapters : undefined });
 		if (item.parts || item.text) await env.AUDIO.delete(partKey(item.id));
 		await deletePrefix(env, `chunks/${item.id}/`);
 	} catch (e) {
@@ -1278,6 +1342,8 @@ async function loadArticle(env: Env, item: Item): Promise<PartText> {
 		await env.AUDIO.put(pdfKey(item.id), pdf, { httpMetadata: { contentType: "application/pdf" } });
 		item.pdf = true;
 	}
+	// Links for the show notes. Kept text from a web page has no links, so a re-chomp keeps the ones found the first time.
+	if (art.links?.length || !kept) await saveNotes(env, item.id, { ...(await loadNotes(env, item.id)), links: art.links ?? [] });
 	item.title = art.title;
 	item.byline = art.byline ?? item.byline;
 	item.site = art.site ?? item.site;
@@ -1299,9 +1365,10 @@ async function pdfMarkdown(env: Env, name: string, bytes: ArrayBuffer | Uint8Arr
 
 async function pdfArticle(env: Env, bytes: ArrayBuffer, url: string): Promise<Article> {
 	const file = decodeURIComponent(new URL(url).pathname.split("/").pop() || "document.pdf");
-	const { text, headings, h1 } = markdownToSpeech(await pdfMarkdown(env, file, bytes));
+	const md = await pdfMarkdown(env, file, bytes);
+	const { text, headings, h1 } = markdownToSpeech(md);
 	if (!text) throw new Error("Podchast: PDF has no text (it may be scanned images)");
-	return { title: h1 || file.replace(/\.pdf$/i, ""), text, headings, site: new URL(url).hostname.replace(/^www\./, "") };
+	return { title: h1 || file.replace(/\.pdf$/i, ""), text, headings, site: new URL(url).hostname.replace(/^www\./, ""), links: markdownLinks(md) };
 }
 
 /** Read text that was sent to /add. Markdown is made plain, and its headings become chapters. */
@@ -1309,10 +1376,11 @@ async function textArticle(env: Env, item: Item): Promise<Article> {
 	// Older items kept their text in parts/ until the job read it.
 	const obj = (await env.AUDIO.get(readKey(item.id))) ?? (await env.AUDIO.get(partKey(item.id)));
 	if (!obj) throw new Error("Podchast: the saved text is missing");
-	const { text, headings, h1 } = markdownToSpeech(await obj.text());
+	const md = await obj.text();
+	const { text, headings, h1 } = markdownToSpeech(md);
 	if (!text) throw new Error("Podchast: the text was empty after I took out the markdown");
 	const title = item.title?.replace(/ \(Part \d+ of \d+\)$/, "") || h1 || text.split("\n")[0].slice(0, 80).replace(/\s+\S*$/, "") + (text.length > 80 ? "…" : "");
-	return { title, text, headings, site: item.url ? new URL(item.url).hostname.replace(/^www\./, "") : undefined };
+	return { title, text, headings, site: item.url ? new URL(item.url).hostname.replace(/^www\./, "") : undefined, links: markdownLinks(md) };
 }
 
 /** The article as markdown, to keep in read/<id>.md. Re-chomp reads it back with markdownToSpeech. */
