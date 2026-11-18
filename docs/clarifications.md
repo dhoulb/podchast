@@ -49,6 +49,7 @@ Do not add a rule from a guess. A rule must come from a clip that shows the prob
 | `dash-pause` | "right — of course — and" → no pause (90 ms) | "right, of course, and" (comma, about 460 ms). Dave chose a comma over "--" (390 ms). |
 | `ie-eg` | "i.e.", "ie", "e.g.", "eg" read as letters | "i.e." → "that is,", "e.g." → "for example," (Dave, 18 Nov 2026) |
 | `letter-plurals` | "the three Rs" → maybe "the three rupees" | "the three R's" (after a number only) |
+| `masked-words` | "f*ck" → "F asterisk CK", "f*cking" → "F asterisk king" | The masked swear word becomes its first letter: "F", "S". Next to other letters, the letter's name: "effing", "eff ton", "bull ess" (Edge reads "F-ing" as "fing" and "bull-S" as "bulless"). A masked word that is not a swear word is written out ("her*in" → "heroin"). A footnote "*" is not changed. Dave, 18 Nov 2026. |
 | `mount` | "Mt. Everest", "Mt Fuji" → "M T Everest" | "Mount Everest" |
 | `year-on-year` | "YoY" → "why a why" | "year on year" ("year over year" in en-US). Also QoQ, MoM. |
 | `fiscal-year` | "FY25" → "F Y 2025" | "financial year 2025", or "fiscal year 2025" in en-US. No country: no change. |
@@ -136,6 +137,8 @@ Whisper hides some sounds. It wrote "1-2x" as "1-2 XA", and it left out the "I" 
 - 17 Nov 2026: first audit. Eight episodes (about 3.5 hours) were transcribed and compared with their text. 98–99% of words matched. 65 test clips. Review page with clips: https://claude.ai/artifact/HgY3Y5j5epFGzDa8KXWrNV
 - 18 Nov 2026: Dave chose "or" for slashes, "for example" for i.e., and a comma for dashes. Rules added in `src/clarifications.ts` (PR #70).
 - 18 Nov 2026, later: Dave's review. Slashes become commas ("founder/CEO" means both). "i.e." becomes "that is". New rules: `urls`, `dates`, `money-thousands`, `out-of`, `mount`, `year-on-year`, `fiscal-year`, `sentence-pause`, `paragraph-pause`. Rules get languages. Paragraphs in a section go in one request. 28 test lines from NVIDIA NeMo's English text normalization showed that Edge already reads most short forms, units, money, times and kings well (clips in the project files, `clarifications/nemo-2026-11-18/`).
+
+- 18 Nov 2026, evening: `masked-words` (Dave heard "F asterisk CK" in a Dan Koe episode). Dave: do not ♻️ RECHOMP old episodes for a clarification fix. Fix it and move on.
 
 ## Ideas not done yet
 
