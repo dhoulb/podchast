@@ -51,6 +51,16 @@ export async function fetchArticle(url: string, pdf?: (bytes: ArrayBuffer, url: 
 	return extractArticle(resp, resp.url || url);
 }
 
+/**
+ * The language of a page, as a BCP 47 tag such as "en-GB". A tag with a country wins, because the
+ * clarifications use the country for date order: <html lang>, then og:locale ("en_US"), then the
+ * Content-Language header. Otherwise the first plain tag ("en"). Undefined if the page gives none.
+ */
+export function pageLang(...tags: (string | null | undefined)[]): string | undefined {
+	const clean = tags.map((t) => t?.split(",")[0].trim().replace(/_/g, "-")).filter((t): t is string => !!t && /^[a-z]{2,3}(-[a-z0-9]{2,8})*$/i.test(t));
+	return clean.find((t) => t.includes("-")) ?? clean[0];
+}
+
 type Block = { tag: string; text: string; body: boolean; article: boolean; main: boolean; chrome: boolean; links?: Link[] };
 
 const BLOCKS = "p, h1, h2, h3, h4, h5, h6, li, blockquote, dd";
@@ -242,7 +252,7 @@ export async function extractArticle(resp: Response, url: string): Promise<Artic
 		site,
 		excerpt: meta["og:description"] || meta["description"] || meta["twitter:description"] || undefined,
 		text,
-		lang,
+		lang: pageLang(lang, meta["og:locale"], resp.headers.get("content-language")),
 		image: absUrl(meta["og:image"] || meta["twitter:image"], url),
 		headings: paras.filter((t) => isHeading.has(t) && t.length <= 200),
 		links,

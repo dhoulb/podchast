@@ -2,11 +2,20 @@
 
 Clarifications are text rewrites that run just before Edge TTS speaks the text. Each one fixes a thing that Edge reads badly, for example "1-2x" read as "one dash two x".
 
-- Rules: `src/clarifications.ts`. One entry for each rule: `id`, `why`, `apply`, and a test line (`before` and `after`).
+- Rules: `src/clarifications.ts`. One entry for each rule: `id`, `why`, `apply`, and a test line (`before` and `after`, and `lang` if the rule needs one).
 - Where they run: `edgeChunk()` in `src/tts.ts`, on each segment (one Edge request), just before `edgeSynthesise()`. Heading rules (`heading: true`) run only on headings.
-- They change only what Edge hears. The kept text (`read/<id>.md`), the status page and chapter titles do not change. The VTT transcript shows the clarified text, because Edge sends back what it spoke.
+- They change only what Edge hears. The kept text (`read/<id>.md`), the status page and chapter titles do not change. The VTT transcript shows the clarified text, because Edge sends back what it spoke. `unmark()` takes the pause marks out of it.
 - Tests: `npm test` checks that each rule turns `before` into `after`, and that some normal text does not change.
 - Clips: `test/clarifications/<id>/before.mp3` (the test line without the rule) and `after.mp3` (with the rule). Keep them. When a new voice or TTS model comes out, make the clips again and listen, to see which rules are still needed.
+
+## Languages
+
+Each item has a `lang`: the page language, such as `en-GB`. The extractor takes it from `<html lang>`, then `og:locale`, then the `Content-Language` header. A tag with a country wins. Text sent to `/add` and email have no language. The prepare job copies `lang` into the plan, and each chunk job gives it to `clarify()`.
+
+- Each rule has `langs`. The default is `["en"]`: all English. `"en-US"` is only US English. `"*"` is every language (the pause marks and emoji).
+- An item with no language is taken to be English, because the voice is English. Rules that need a country (dates, `fiscal-year`) do nothing when there is no country.
+- An item in another language (for example `fr`) gets only the `"*"` rules. Note: the English voice still reads it. A voice for each language would be a separate change (ask Dave: it changes the voice default).
+- Date order: `en-US` is month first. Other countries (`en-GB`, `en-AU`, `en-IE`, `en-IN`, …) are day first. `en-CA` uses both, so it counts as not known.
 
 ## Add a new clarification
 
@@ -25,17 +34,26 @@ Do not add a rule from a guess. A rule must come from a clip that shows the prob
 
 | id | Edge did this | Rewrite |
 | --- | --- | --- |
+| `urls` | "https://www.google.com/adventure?utm_source=x" → "https colon slash slash … utm underscore source equal sign x" | "google.com/adventure" ("google.com slash adventure"). A path with more than one part, or a long one, is taken out. |
+| `dates` | "10/9/2006" → "October 9th" (US order), also on UK sites | A full date only: "10 September 2006" (day first) or "September 10, 2006" (month first). A part above 12 is the day. If not, the language gives the order. No country: no change. "3/4" never changes. |
 | `range-times` | "1-2x a week" → "one dash two x" | "1 to 2 times a week" |
+| `money-thousands` | "$5k–10k" → "dollar five K ten K" | "$5,000 to $10,000" |
 | `footnotes` | "realize.1 Most" → "realize point one" | Remove the footnote number. |
-| `slash-words` | "founder/CEO" → "founder slash CEO" | "founder or CEO". A series: "dog, tiger, or bear". Not for URLs or short forms (km/h, n/a). |
-| `slash-numbers` | "1/2/3" → "1 slash 2 slash 3" | "1, 2, or 3". Not for dates (17/11/26), fractions (1/2) or 24/7. |
+| `out-of` | "4/5 stars" → "four fifth stars" | "4 out of 5 stars", also after "rated", "scored", "gave it". "1/3 of the cost" is already read "one third of". |
+| `slash-words` | "founder/CEO" → "founder slash CEO" | "founder, CEO" (read "founder CEO"). A series: "dog, tiger, bear". Not "or": Dave, 18 Nov 2026. Not for URLs or short forms (km/h, n/a). |
+| `slash-numbers` | "1/2/3" → "1 slash 2 slash 3" | "1, 2, 3". Not for dates, fractions (1/2) or 24/7. |
 | `underscores` | "subscription_purchased" → "subscription underscore purchased" | "subscription purchased" |
 | `emoji` | "▪", "✅", "➡️" → "black small square", "check mark button", "right arrow" | Remove emoji and symbol bullets. |
 | `roman-headings` | Heading "I – You…" → the word "I" ("eye"); "V –" → the letter "vee" | "Part 1. You…" (headings only) |
 | `quote-attribution` | "subject.– Maxwell Maltz" → "subject dot Maxwell Maltz", no pause | "subject. Maxwell Maltz" |
 | `dash-pause` | "right — of course — and" → no pause (90 ms) | "right, of course, and" (comma, about 460 ms). Dave chose a comma over "--" (390 ms). |
-| `ie-eg` | "i.e.", "ie", "e.g.", "eg" read as letters | "for example," (Dave's choice) |
+| `ie-eg` | "i.e.", "ie", "e.g.", "eg" read as letters | "i.e." → "that is,", "e.g." → "for example," (Dave, 18 Nov 2026) |
 | `letter-plurals` | "the three Rs" → maybe "the three rupees" | "the three R's" (after a number only) |
+| `mount` | "Mt. Everest", "Mt Fuji" → "M T Everest" | "Mount Everest" |
+| `year-on-year` | "YoY" → "why a why" | "year on year" ("year over year" in en-US). Also QoQ, MoM. |
+| `fiscal-year` | "FY25" → "F Y 2025" | "financial year 2025", or "fiscal year 2025" in en-US. No country: no change. |
+| `sentence-pause` | A full stop gives 440 ms, which sounds rushed | ".;" after a full stop: about 750 ms. Not after short forms (Dr., Mr., No., U.S., J.). |
+| `paragraph-pause` | Paragraphs in one request get 440 ms | ". .." at the end of each paragraph: about 1 s. After "?", "!" or a quote: "? . ..". A colon or a list item with no mark gets a full stop. |
 
 ## What Edge already reads well
 
@@ -49,40 +67,54 @@ Tested on 17 and 18 Nov 2026. No rule needed:
 
 ## Pauses
 
-Edge refuses SSML `<break>`. There are two ways to make a pause.
+Edge refuses SSML `<break>`. There are two ways to make a pause, and Podchast uses both.
 
-1. **Silent MP3 frames between requests** (PR #69). Each paragraph and heading is its own Edge request, and `silence()` in `src/tts.ts` puts silence between them. Measured in real episodes:
+1. **Silent MP3 frames between requests** (PR #69). `silence()` in `src/tts.ts` puts silence between two Edge requests. Each heading is its own request, so the silence before and after it, and its chapter time, are exact: 1.5 s plus Edge's own silence before a heading (about 2.5 s in all), and 0.7 s after it (about 0.9 s). A divider (`---`) is 2 s.
+2. **Punctuation inside one request.** The paragraphs between two headings go in one request (up to 2,000 characters, `JOIN_CHARS`). The `sentence-pause` and `paragraph-pause` rules add marks that Edge does not read aloud:
 
-   | Boundary | Before PR #69 | After PR #69 |
+   | Boundary | Mark | Silence |
    | --- | --- | --- |
-   | Between sentences | 460 ms | 460 ms |
-   | Between paragraphs and list items | 470 ms | 1,020 ms |
-   | Before a heading | 470 ms | 2,480 ms |
-   | After a heading | 470 ms | about 900 ms |
+   | Sentence | `.; ` | about 750 ms |
+   | Paragraph or list item | `. .. ` | about 1,000 ms |
+   | Paragraph that ends with "?", "!" or a quote | `? . .. ` | about 1,050 ms |
 
-   Episodes made before PR #69 need ♻️ RECHOMP to get these pauses.
+   If the paragraphs are longer than 2,000 characters, they go in more than one request, with `EDGE_PAUSE_MS` (500 ms) of silence between them. With Edge's own silence, that is also about 1 s.
 
-2. **Punctuation inside one request.** Silence measured in "I waited ? then I left." with one mark in the gap:
+Before 18 Nov 2026 (PR #69 to this change), each paragraph was its own request (at most 12 for each chunk), and sentences had 440 ms. Episodes made before need ♻️ RECHOMP to get the new pauses.
 
-   | Mark | Silence |
-   | --- | --- |
-   | em dash "—" | 90 ms |
-   | en dash "–" | 120 ms |
-   | " - " | 270 ms |
-   | "--" | 390 ms |
-   | full stop | 440 ms |
-   | new paragraph in the same request | 440 ms |
-   | comma | 460 ms |
-   | "…" (one character) | 470 ms |
-   | colon | 640 ms |
-   | "..." | 710 ms |
-   | semicolon | 730 ms |
-   | ". . ." | 780 ms |
-   | ". . . . . ." | 1,170 ms |
+Silence measured in "I waited ? then I left." with one mark in the gap (one request):
 
-   Edge does not read any of these marks out loud. Chained spaced dots give longer pauses. A full stop gives about the same pause as a comma.
+| Mark | Silence |
+| --- | --- |
+| em dash "—" | 90 ms |
+| en dash "–" | 120 ms |
+| " - " | 270 ms |
+| "--" | 390 ms |
+| full stop | 440 ms |
+| new paragraph in the same request | 440 ms |
+| comma | 460 ms |
+| "…" (one character) | 470 ms |
+| colon | 640 ms |
+| "..." before a lower case word | 710 ms |
+| semicolon | 730 ms |
+| ". . ." | 780 ms |
+| ". . . . . ." | 1,170 ms |
 
-A single newline inside a paragraph is joined into one line by `markdownToSpeech()`, so it gets only the pause of its punctuation. Dave wants every newline to get some pause, a paragraph a bit more, and a heading the most. Paragraphs and headings already do this (table 1).
+Before a capital letter (a new sentence), measured on 18 Nov 2026:
+
+| Mark | Silence |
+| --- | --- |
+| `. ` | 440 ms |
+| `... ` | 440 ms (and it sounds like a comma) |
+| `?; ` | 590 ms (`?` alone: 550 ms) |
+| `. . ` or `. … ` | about 630 ms |
+| `.; ` | about 750 ms, steady |
+| `. . . ` | 500 to 1,020 ms, not steady |
+| `. .. ` | about 1,000 ms, steady |
+| `? .. `, `! .. `, `: .. `, no mark + ` .. ` | 550 to 700 ms |
+| `? . .. `, `! . .. `, `." . .. ` | 1,050 to 1,140 ms |
+
+Edge does not read any of these marks out loud. A line with only dots gets no audio at all (Edge sends nothing for text with no letters), so the marks always go after the words. An inline `---` is a 520 ms pause; a `---` line in markdown is a divider.
 
 ## Tools
 
@@ -102,4 +134,11 @@ Whisper hides some sounds. It wrote "1-2x" as "1-2 XA", and it left out the "I" 
 ## History
 
 - 17 Nov 2026: first audit. Eight episodes (about 3.5 hours) were transcribed and compared with their text. 98–99% of words matched. 65 test clips. Review page with clips: https://claude.ai/artifact/HgY3Y5j5epFGzDa8KXWrNV
-- 18 Nov 2026: Dave chose "or" for slashes, "for example" for i.e., and a comma for dashes. Rules added in `src/clarifications.ts`.
+- 18 Nov 2026: Dave chose "or" for slashes, "for example" for i.e., and a comma for dashes. Rules added in `src/clarifications.ts` (PR #70).
+- 18 Nov 2026, later: Dave's review. Slashes become commas ("founder/CEO" means both). "i.e." becomes "that is". New rules: `urls`, `dates`, `money-thousands`, `out-of`, `mount`, `year-on-year`, `fiscal-year`, `sentence-pause`, `paragraph-pause`. Rules get languages. Paragraphs in a section go in one request. 28 test lines from NVIDIA NeMo's English text normalization showed that Edge already reads most short forms, units, money, times and kings well (clips in the project files, `clarifications/nemo-2026-11-18/`).
+
+## Ideas not done yet
+
+- NVIDIA NeMo text processing (`nemo_text_processing/text_normalization/en`, Apache 2.0) is a good checklist of cases. Its `data/whitelist/tts.tsv` has about 100 real expansions ("bldg." → "building"). Speak them all through Edge and add rules only for the ones Edge gets wrong.
+- Scan the kept text (`read/*.md`) for short forms that appear often, and test those.
+- List items get the same 1 s pause as paragraphs. A shorter pause (`.; `) may sound better for short items.

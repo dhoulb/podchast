@@ -5,13 +5,13 @@ import { type Cue, concat, edgeSynthesise } from "./edge-tts";
 type Pieces = Uint8Array[];
 const byteLength = (p: Pieces) => p.reduce((n, a) => n + a.length, 0);
 const piecesSeconds = (p: Pieces) => (p.length ? mp3Seconds(p[0], byteLength(p)) : 0);
-import { clarify } from "./clarifications";
+import { clarify, unmark } from "./clarifications";
 import { chunkText } from "./extract";
 
 const EDGE_PARALLEL = 4;
 
 export type Engine = "edge" | "workers-ai";
-export type TtsEnv = { AI: Ai; VOICE: string; RATE?: string; PITCH?: string; VOLUME?: string; AI_MODEL: string; AI_SPEAKER?: string; TTS_ENGINE?: string; EDGE_FORMAT?: string; EDGE_PAUSE_MS?: string; CLARIFY?: string };
+export type TtsEnv = { AI: Ai; VOICE: string; RATE?: string; PITCH?: string; VOLUME?: string; AI_MODEL: string; AI_SPEAKER?: string; TTS_ENGINE?: string; EDGE_FORMAT?: string; EDGE_PAUSE_MS?: string; CLARIFY?: string; LANG?: string };
 
 async function retry<T>(fn: () => Promise<T>, tries = 3): Promise<T> {
 	let last: unknown;
@@ -73,13 +73,18 @@ export const stripMarkers = (s: string) => s.replace(MARKERS, "");
 const HEADING_BEFORE_MS = 1500;
 const HEADING_AFTER_MS = 700;
 const DIVIDER_MS = 2000;
+// Paragraphs are joined into one request up to this length. Edge takes about 4,000 bytes of SSML for each request.
+const JOIN_CHARS = 2000;
 // Each segment is one Edge request. Keep the subrequests of one chunk job well under the Free plan's 50.
 const MAX_SEGMENTS = 12;
 
 /** One piece of text to speak in one request, and the silence (ms) before it. heading: the text is a heading. */
 export type Segment = { text: string; pause: number; heading?: boolean };
 
-/** Split a chunk at paragraphs, headings and dividers. Short paragraphs are joined when there are too many. */
+/**
+ * Split a chunk at headings and dividers. Each heading is its own request, so its silence and chapter time are exact.
+ * The paragraphs between them are joined into one request (up to JOIN_CHARS), with "\n\n" between paragraphs.
+ */
 export function segments(text: string, paragraphMs: number): Segment[] {
 	const out: (Segment & { para: boolean })[] = [];
 	let pause = paragraphMs;
@@ -99,9 +104,10 @@ export function segments(text: string, paragraphMs: number): Segment[] {
 		const clean = stripMarkers(t).trim();
 		// Edge sends no audio for text with no letters or digits, and that fails the job.
 		if (!/[\p{L}\p{N}]/u.test(clean)) continue;
-		// With no paragraph pause, join paragraphs into one request, as before.
+		// Paragraphs in one section go in one request, up to JOIN_CHARS. The "paragraph-pause"
+		// clarification turns each "\n\n" into marks that Edge reads as a 1 second pause.
 		const last = out.at(-1);
-		if (!paragraphMs && last?.para && pause <= paragraphMs) last.text += `\n\n${clean}`;
+		if (last?.para && pause <= paragraphMs && last.text.length + clean.length <= JOIN_CHARS) last.text += `\n\n${clean}`;
 		else out.push({ text: clean, pause, para: true });
 		pause = paragraphMs;
 	}
@@ -157,7 +163,7 @@ async function edgeChunk(env: TtsEnv, text: string): Promise<{ audio: Pieces; cu
 	let t = 0;
 	for (const seg of segments(text, Number(env.EDGE_PAUSE_MS) || 0)) {
 		// Clarifications rewrite text that Edge reads badly (src/clarifications.ts). CLARIFY=off turns them off.
-		const say = env.CLARIFY === "off" ? seg.text : clarify(seg.text, seg.heading);
+		const say = env.CLARIFY === "off" ? seg.text : clarify(seg.text, { heading: seg.heading, lang: env.LANG });
 		if (!/[\p{L}\p{N}]/u.test(say)) continue;
 		const r = await retry(() => edgeSynthesise(say, edgeOptions(env)), 2);
 		const gap = silence(r.audio[0], seg.pause);
@@ -165,7 +171,11 @@ async function edgeChunk(env: TtsEnv, text: string): Promise<{ audio: Pieces; cu
 			audio.push(gap.bytes);
 			t += gap.seconds;
 		}
-		for (const c of r.cues) cues.push({ start: c.start + t, end: c.end + t, text: c.text });
+		// Edge sends back what it spoke, with the pause marks. The transcript shows the text without them.
+		for (const c of r.cues) {
+			const text = unmark(c.text);
+			if (/[\p{L}\p{N}]/u.test(text)) cues.push({ start: c.start + t, end: c.end + t, text });
+		}
 		audio.push(...r.audio);
 		t += piecesSeconds(r.audio);
 	}
