@@ -78,7 +78,7 @@ All settings live in GitHub: **Settings → Secrets and variables → Actions**.
 | `EMAIL_FROM` | Secret | Senders that may email PODCHAST. Separate them with commas, spaces or new lines, in any mix. `@example.com` allows a whole domain. |
 | `VOICE` | Variable | Edge voice. Default `en-US-BrianNeural`. See [TTS engine](#tts-engine). |
 | `RATE` | Variable | Speech speed, for example `+10%`. Default `+0%`. |
-| `PITCH` | Variable | Voice pitch, for example `-5%`. Default `-8%`. |
+| `PITCH` | Variable | Voice pitch, for example `-5%`. Default `-5%`. |
 | `VOLUME` | Variable | Voice volume, relative, for example `+50%`. Default `+50%`. |
 | `SHORTCUT_URL` | Variable | iCloud link to your own copy of the iOS Shortcut. Default: the shared PODCHAST Shortcut. |
 | `DOMAIN` | Variable | Custom domain, for example `podchast.example.com`. See [Custom domain](#custom-domain). |
