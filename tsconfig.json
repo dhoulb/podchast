@@ -10,5 +10,6 @@
 		"skipLibCheck": true,
 		"allowImportingTsExtensions": true
 	},
-	"include": ["src", "test"]
+	"include": ["src", "test"],
+	"exclude": ["test/**/*.test.ts"]
 }

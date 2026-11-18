@@ -5,12 +5,13 @@ import { type Cue, concat, edgeSynthesise } from "./edge-tts";
 type Pieces = Uint8Array[];
 const byteLength = (p: Pieces) => p.reduce((n, a) => n + a.length, 0);
 const piecesSeconds = (p: Pieces) => (p.length ? mp3Seconds(p[0], byteLength(p)) : 0);
+import { clarify } from "./clarifications";
 import { chunkText } from "./extract";
 
 const EDGE_PARALLEL = 4;
 
 export type Engine = "edge" | "workers-ai";
-export type TtsEnv = { AI: Ai; VOICE: string; RATE?: string; PITCH?: string; VOLUME?: string; AI_MODEL: string; AI_SPEAKER?: string; TTS_ENGINE?: string; EDGE_FORMAT?: string; EDGE_PAUSE_MS?: string };
+export type TtsEnv = { AI: Ai; VOICE: string; RATE?: string; PITCH?: string; VOLUME?: string; AI_MODEL: string; AI_SPEAKER?: string; TTS_ENGINE?: string; EDGE_FORMAT?: string; EDGE_PAUSE_MS?: string; CLARIFY?: string };
 
 async function retry<T>(fn: () => Promise<T>, tries = 3): Promise<T> {
 	let last: unknown;
@@ -75,8 +76,8 @@ const DIVIDER_MS = 2000;
 // Each segment is one Edge request. Keep the subrequests of one chunk job well under the Free plan's 50.
 const MAX_SEGMENTS = 12;
 
-/** One piece of text to speak in one request, and the silence (ms) before it. */
-export type Segment = { text: string; pause: number };
+/** One piece of text to speak in one request, and the silence (ms) before it. heading: the text is a heading. */
+export type Segment = { text: string; pause: number; heading?: boolean };
 
 /** Split a chunk at paragraphs, headings and dividers. Short paragraphs are joined when there are too many. */
 export function segments(text: string, paragraphMs: number): Segment[] {
@@ -91,7 +92,7 @@ export function segments(text: string, paragraphMs: number): Segment[] {
 		}
 		if (t.startsWith(HEADING)) {
 			const h = stripMarkers(t).trim();
-			if (h) out.push({ text: h, pause: Math.max(pause, HEADING_BEFORE_MS), para: false });
+			if (h) out.push({ text: h, pause: Math.max(pause, HEADING_BEFORE_MS), para: false, heading: true });
 			pause = HEADING_AFTER_MS;
 			continue;
 		}
@@ -115,7 +116,7 @@ export function segments(text: string, paragraphMs: number): Segment[] {
 		out[best].text += `\n\n${out[best + 1].text}`;
 		out.splice(best + 1, 1);
 	}
-	return out.map(({ text, pause }) => ({ text, pause }));
+	return out.map(({ text, pause, heading }) => (heading ? { text, pause, heading } : { text, pause }));
 }
 
 /**
@@ -155,7 +156,10 @@ async function edgeChunk(env: TtsEnv, text: string): Promise<{ audio: Pieces; cu
 	const cues: Cue[] = [];
 	let t = 0;
 	for (const seg of segments(text, Number(env.EDGE_PAUSE_MS) || 0)) {
-		const r = await retry(() => edgeSynthesise(seg.text, edgeOptions(env)), 2);
+		// Clarifications rewrite text that Edge reads badly (src/clarifications.ts). CLARIFY=off turns them off.
+		const say = env.CLARIFY === "off" ? seg.text : clarify(seg.text, seg.heading);
+		if (!/[\p{L}\p{N}]/u.test(say)) continue;
+		const r = await retry(() => edgeSynthesise(say, edgeOptions(env)), 2);
 		const gap = silence(r.audio[0], seg.pause);
 		if (gap) {
 			audio.push(gap.bytes);
