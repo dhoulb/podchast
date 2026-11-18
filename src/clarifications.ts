@@ -146,9 +146,11 @@ export const CLARIFICATIONS: Clarification[] = [
 				if (parts.every((p) => p.length <= 2)) return m;
 				if (m.toLowerCase() === "and/or") return "and or";
 				return parts.join(", ");
-			}),
-		before: "She is a founder/CEO. Pick dog/tiger/bear. Read it on X / Twitter.",
-		after: "She is a founder, CEO. Pick dog, tiger, bear. Read it on X, Twitter.",
+			})
+			// A spaced slash after a quote or bracket, as in X titles: '"5 things" / X'.
+			.replace(/(?<=["”’)\]])\s+\/\s+(?=\p{L})/gu, ", "),
+		before: 'She is a founder/CEO. Pick dog/tiger/bear. Read it on X / Twitter. Tim on X: "Do 5 things" / X.',
+		after: 'She is a founder, CEO. Pick dog, tiger, bear. Read it on X, Twitter. Tim on X: "Do 5 things", X.',
 	},
 	{
 		id: "slash-numbers",
