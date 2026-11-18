@@ -22,7 +22,7 @@
 		"VOICE": "en-US-BrianNeural",
 		"RATE": "+0%",
 		// Edge prosody pitch, such as "-5%" or "-2Hz". Lower is calmer.
-		"PITCH": "-8%",
+		"PITCH": "-5%",
 		// Edge prosody volume, relative, such as "+50%". Edge speaks quite quietly by default.
 		"VOLUME": "+50%",
 		// Silence (ms) between paragraphs. Each paragraph is then its own Edge request. "0" reads paragraphs together.
