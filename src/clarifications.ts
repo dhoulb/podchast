@@ -58,6 +58,13 @@ function roman(s: string): number | undefined {
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 /** 5 → "5,000", 1.5 → "1,500". */
 const thousands = (n: string) => Math.round(Number(n) * 1000).toLocaleString("en-US");
+/** Masked words: the stem (each letter may be "*" in the text) and what to say. No "say": the first letter, as a capital. */
+const MASKED: [string, string?][] = [
+	["motherfuck", "mother eff"], ["fuck"], ["shit"], ["bitch"], ["bastard"], ["cunt"], ["cock"], ["dick"], ["prick"], ["twat"], ["wank"], ["piss"], ["damn"], ["crap"], ["hell"], ["arse"], ["ass"],
+	["heroin", "heroin"], ["cocaine", "cocaine"], ["porn", "porn"], ["suicide", "suicide"], ["kill", "kill"], ["rape", "rape"], ["sex", "sex"],
+];
+/** How a letter is said, to write it next to other letters. */
+const LETTER: Record<string, string> = { a: "ay", b: "bee", c: "see", d: "dee", f: "eff", h: "aitch", p: "pee", s: "ess", t: "tee", w: "double-u" };
 /** Short forms that end with a full stop but do not end a sentence. */
 const ABBR = "Mr|Mrs|Ms|Dr|St|Mt|Jr|Sr|Prof|No|vs|etc|Inc|Ltd|Co|Corp|Gen|Gov|Rev|Fig|fig|approx|al|ch|p|pp|vol|Vol|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec|Ave|Rd|Bros|Capt|Col|Lt|Sgt";
 
@@ -232,6 +239,38 @@ export const CLARIFICATIONS: Clarification[] = [
 		apply: (t) => t.replace(/\b(\d+|[Oo]ne|[Tt]wo|[Tt]hree|[Ff]our|[Ff]ive|[Ss]ix|[Ss]even|[Ee]ight|[Nn]ine|[Tt]en)\s+(\p{Lu})s\b/gu, "$1 $2's"),
 		before: "I call it the three Rs: repost, repurpose and remix. The 6 Ps of copy.",
 		after: "I call it the three R's: repost, repurpose and remix. The 6 P's of copy.",
+	},
+	{
+		id: "masked-words",
+		why: 'Edge reads the "*" in a masked swear word: "f*ck" is "F asterisk CK". The masked part becomes its first letter, so it stays clean: "f*ck" is "F", "f*cking" is "effing", "bullsh*t" is "bull ess". A masked word that is not a swear word ("her*in") is written out.',
+		apply: (t) =>
+			// Letters on both sides of the "*", so a footnote mark ("terms apply*", "*Note") stays as it is.
+			t.replace(/(?<![\p{L}*])\p{L}+\*+[\p{L}*]*\p{L}(?![\p{L}*])/gu, (word) => {
+				const lower = word.toLowerCase();
+				for (const [stem, say] of MASKED) {
+					const m = new RegExp(`^(\\p{L}*?)(${stem.replace(/[a-z]/g, (c) => `[${c}*]`)})(\\p{L}*)$`, "u").exec(lower);
+					if (!m || !m[2].includes("*")) continue;
+					const [, pre, , post] = m;
+					const head = word.slice(0, pre.length);
+					const tail = word.slice(word.length - post.length);
+					if (say) return head + (head || word[0] === word[0].toLowerCase() ? say : say[0].toUpperCase() + say.slice(1)) + tail;
+					// A swear word becomes one letter. Next to other letters, the letter's name is written,
+					// because Edge reads "F-ing" as "fing" and "bull-S" as "bulless".
+					if (!head && !tail) return stem[0].toUpperCase();
+					const name = LETTER[stem[0]] ?? stem[0].toUpperCase();
+					// "sh*tty" → "essy", "b*tches" → "bees".
+					const rest = tail.replace(new RegExp(`^${stem.at(-1)}(?=y$)`, "i"), "").replace(/^es$/i, "s");
+					const end = !rest ? "" : /^(?:ing|in|ed|er|ers|s|y)$/i.test(rest) ? rest : ` ${rest}`;
+					const said = (head ? `${head} ` : "") + name + end.toLowerCase();
+					return word[0] === word[0].toUpperCase() ? said[0].toUpperCase() + said.slice(1) : said;
+				}
+				// Not known: keep the letters before the first "*" as one capital letter.
+				return word[0].toUpperCase();
+			})
+			// "a F" and "a eff ton" are said "an F", "an eff ton".
+			.replace(/\b([Aa]) (?=[AEFHILMNORSX]\b|[Ee]ff|[Ee]ss|[Aa]itch)/g, "$1n "),
+		before: "Making a f*ckton of money. What the f*ck. Some bullsh*t. Not doing sh*t. Six months on her*in. Nothing would f*cking change. A b*tch.",
+		after: "Making an eff ton of money. What the F. Some bull ess. Not doing S. Six months on heroin. Nothing would effing change. A B.",
 	},
 	{
 		id: "mount",

@@ -29,6 +29,7 @@ test("text that must not change", () => {
 		"It was 3/4 of the cost. Open 24/7.",
 		"Sent 10/9/2006 in FY25.", // No country: the order is not known.
 		"Mt is short. The MOM test.",
+		"Terms apply*. *Note: 5 * 3 is 15.",
 	]) {
 		assert.equal(words(t), t);
 		assert.equal(words(t, { lang: "en" }), t);
