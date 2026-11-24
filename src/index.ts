@@ -1403,10 +1403,13 @@ function markdownToSpeech(md: string): { text: string; headings: string[]; h1?: 
 	const headings: string[] = [];
 	let h1: string | undefined;
 	let buf: string[] = [];
+	let listItem = false; // buf holds a list item, which ends with a full stop.
 	let fence = false;
 	const flush = () => {
-		if (buf.length) paras.push(buf.join(" "));
+		const t = buf.join(" ");
+		if (t) paras.push(listItem && !/[.!?:;]$/.test(t) ? `${t}.` : t);
 		buf = [];
+		listItem = false;
 	};
 	const inline = (s: string) =>
 		s
@@ -1452,12 +1455,14 @@ function markdownToSpeech(md: string): { text: string; headings: string[]; h1?: 
 			if (p.length <= 200) headings.push(p);
 			continue;
 		}
-		// List items and quotes become their own sentences.
+		// List items and quotes become their own sentences. The lines after a list item, up to a
+		// blank line, are part of it: a wrapped item ("build a Watch\n  app") is one sentence.
 		const item = line.match(/^\s*(?:[-*+]|\d+[.)])\s+(.*)$/);
 		if (item) {
 			flush();
 			const t = inline(item[1]);
-			if (t) paras.push(/[.!?:;]$/.test(t) ? t : `${t}.`);
+			if (t) buf.push(t);
+			listItem = true;
 			continue;
 		}
 		const t = inline(line.replace(/^\s*>+\s?/, "").replace(/\|/g, " "));
