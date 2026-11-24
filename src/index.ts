@@ -5,7 +5,7 @@ import icon192 from "../assets/icon-192.png";
 import icon512 from "../assets/icon-512.png";
 import llms from "./llms.txt";
 import skillTemplate from "../skill/podchast/SKILL.md";
-import { type Article, chunkText, fetchArticle } from "./extract";
+import { type Article, chunkText, decodeEntities, fetchArticle } from "./extract";
 import { readMail } from "./mail";
 import { concat } from "./edge-tts";
 import { type Chapter, id3Tag, readChapters } from "./id3";
@@ -1413,7 +1413,11 @@ function markdownToSpeech(md: string): { text: string; headings: string[]; h1?: 
 	};
 	const inline = (s: string) =>
 		s
-			.replace(/<[^>]+>/g, "")
+			.replace(/<(https?:\/\/[^>\s]+)>/g, "$1") // Autolinks keep the URL (the "urls" clarification shortens it).
+			.replace(/<br\s*\/?>/gi, " ")
+			.replace(/<\/?[a-z][^>]*>/gi, "") // HTML tags, but not "5 < 6 > 2".
+			.replace(/\[\^[^\]]+\]:?/g, "") // Footnote marks ("[^1]") and the start of a footnote ("[^1]:").
+			.replace(/^\[[ xX]\]\s+/, "") // Task list boxes.
 			.replace(/!\[[^\]]*\]\([^)]*\)/g, "")
 			.replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
 			.replace(/\[([^\]]+)\]\[[^\]]*\]/g, "$1")
@@ -1422,6 +1426,8 @@ function markdownToSpeech(md: string): { text: string; headings: string[]; h1?: 
 			.replace(/(^|\W)[*_]([^*_\s][^*_]*?)[*_](?=\W|$)/g, "$1$2")
 			.replace(/~~(.+?)~~/g, "$1")
 			.replace(/\\([\\`*_{}[\]()#+\-.!>|])/g, "$1") // Markdown escapes.
+			.replace(/\\$/, "") // A "\" at the end of a line is a line break.
+			.replace(/&[#\w]+;/g, (e) => decodeEntities(e))
 			.replace(/\s+/g, " ")
 			.trim();
 	for (const line of md.replace(/\r\n?/g, "\n").split("\n")) {
