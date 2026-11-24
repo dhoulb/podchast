@@ -69,5 +69,12 @@ test("pause marks", () => {
 	assert.equal(clarify("One. Two.\n\nThree"), "One.; Two. .. Three");
 	assert.equal(clarify("See Mr. Smith. He is in No. 5. Yes."), "See Mr. Smith.; He is in No. 5.; Yes.");
 	assert.equal(clarify("The U.S. Army. J. R. R. Tolkien wrote it."), "The U.S. Army.; J. R. R. Tolkien wrote it.");
+	// Edge cuts a sentence at about 490 characters, and ".;" does not end one. A plain full stop is kept before the run gets too long.
+	const long = Array.from({ length: 12 }, (_, i) => `Sentence number ${i} has a few more words in it.`).join(" ");
+	const runs = clarify(long).split(/(?<=\.) (?=S)/).map((s) => s.length);
+	assert.ok(runs.length > 1 && runs.every((n) => n <= 400), String(runs));
+	assert.equal(clarify(`${long}\n\n${long}`).split(". .. ").length, 2);
+	// A "?" or "!" ends Edge's sentence, so the count starts again after it.
+	assert.equal(clarify("Why? It works. Then it stops."), "Why? It works.; Then it stops.");
 	assert.equal(unmark('One.; Two. .. Three? . .. She said "yes."; Go'), 'One. Two. Three? She said "yes." Go');
 });
