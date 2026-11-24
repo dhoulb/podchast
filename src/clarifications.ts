@@ -70,6 +70,9 @@ const ABBR = "Mr|Mrs|Ms|Dr|St|Mt|Jr|Sr|Prof|No|vs|etc|Inc|Ltd|Co|Corp|Gen|Gov|Re
 
 const WORD = String.raw`\p{L}[\p{L}\p{N}'’-]*`;
 
+/** Edge cuts a sentence at about 490 characters. Keep each run of ".;" sentences shorter than this. */
+const EDGE_SENTENCE = 400;
+
 export const CLARIFICATIONS: Clarification[] = [
 	{
 		id: "urls",
@@ -313,7 +316,22 @@ export const CLARIFICATIONS: Clarification[] = [
 		id: "sentence-pause",
 		why: 'A full stop gives only 440 ms, which sounds rushed. ".;" gives about 750 ms, and Edge does not read the ";". Not after short forms such as "Dr." or "U.S.".',
 		langs: ["*"],
-		apply: (t) => t.replace(new RegExp(String.raw`(?<!\b(?:${ABBR}))(?<=[\p{Ll}%)]{2}|\p{N}|[\p{Ll}\p{N}%)]["”’])\.(["”’]?)(?=[ \t]+["“‘(]?\p{Lu})`, "gu"), ".$1;"),
+		apply: (t) => {
+			const re = new RegExp(String.raw`(?<!\b(?:${ABBR}))(?<=[\p{Ll}%)]{2}|\p{N}|[\p{Ll}\p{N}%)]["”’])\.(["”’]?)(?=[ \t]+["“‘(]?\p{Lu})`, "gu");
+			// Edge does not end a sentence at ".;", and it cuts a sentence of about 490 characters before its last word (24 Nov 2026).
+			// So a full stop stays plain (a real sentence end) where the next ".;" would make Edge's sentence longer than EDGE_SENTENCE.
+			const stops = [...t.matchAll(re)].map((m) => m.index + 1 + m[1].length);
+			const ends = [...t.matchAll(/[!?]["”’)]?(?=\s)|\n/g)].map((m) => m.index + m[0].length);
+			const marked = new Set<number>();
+			let from = 0;
+			stops.forEach((at, i) => {
+				for (const e of ends) if (e <= at && e > from) from = e;
+				const next = Math.min(stops[i + 1] ?? t.length, ends.find((e) => e > at) ?? t.length);
+				if (next - from <= EDGE_SENTENCE) marked.add(at);
+				else from = at;
+			});
+			return t.replace(re, (m, q: string, offset: number) => (marked.has(offset + 1 + q.length) ? `.${q};` : m));
+		},
 		before: 'They set goals. But it is hard. She said "it works." Then Dr. Smith left the U.S. Army.',
 		after: 'They set goals.; But it is hard.; She said "it works."; Then Dr. Smith left the U.S. Army.',
 	},

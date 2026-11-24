@@ -80,6 +80,8 @@ Edge refuses SSML `<break>`. There are two ways to make a pause, and Podchast us
    | Paragraph or list item | `. .. ` | about 1,000 ms |
    | Paragraph that ends with "?", "!" or a quote | `? . .. ` | about 1,050 ms |
 
+   Edge does not end a sentence at `.;`. Edge cuts a sentence of about 490 characters before its last word, and reads that word as a new sentence after a pause (Dave heard "until the big break … comes." on 24 Nov 2026; found in 10 of 18 episodes). So `sentence-pause` keeps a plain full stop (440 ms, a real sentence end) where the next `.;` would make the run longer than 400 characters (`EDGE_SENTENCE`). One sentence longer than about 490 characters with no full stop is still cut.
+
    If the paragraphs are longer than 2,000 characters, they go in more than one request, with `EDGE_PAUSE_MS` (500 ms) of silence between them. With Edge's own silence, that is also about 1 s.
 
 Before 18 Nov 2026 (PR #69 to this change), each paragraph was its own request (at most 12 for each chunk), and sentences had 440 ms. Episodes made before need ♻️ RECHOMP to get the new pauses.
@@ -142,6 +144,8 @@ Whisper hides some sounds. It wrote "1-2x" as "1-2 XA", and it left out the "I" 
 - 18 Nov 2026, evening: `masked-words` (Dave heard "F asterisk CK" in a Dan Koe episode). Dave: do not ♻️ RECHOMP old episodes for a clarification fix. Fix it and move on.
 
 - 24 Nov 2026: `number-plus` (Dave heard "twenty five zero zero zero plus"). Also: a list item that wraps onto a second line is one sentence now (PR #78), not two paragraphs with a pause.
+
+- 24 Nov 2026, later: Edge cut a long run of `.;` sentences at about 490 characters (Serendipity episode). `sentence-pause` now keeps a plain full stop every 400 characters or less.
 
 ## Ideas not done yet
 
