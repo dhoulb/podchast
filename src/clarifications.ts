@@ -273,6 +273,13 @@ export const CLARIFICATIONS: Clarification[] = [
 		after: "Making an eff ton of money. What the F. Some bull ess. Not doing S. Six months on heroin. Nothing would effing change. A B.",
 	},
 	{
+		id: "number-plus",
+		why: 'Edge reads "25,000+" as "twenty five zero zero zero plus" (Dave, 24 Nov 2026). The "+" after a number becomes " plus", and the commas come out of the number, so it is read "twenty five thousand plus".',
+		apply: (t) => t.replace(/(?<![\w.,])(\d{1,3}(?:,\d{3})+|\d+)\+(?![\w+])/g, (_m, n: string) => `${n.replace(/,/g, "")} plus`),
+		before: "It claims 25,000+ communities, 550,000+ reviews and 60+ runs. Call +1 415. Use C++ or Nike+.",
+		after: "It claims 25000 plus communities, 550000 plus reviews and 60 plus runs. Call +1 415. Use C++ or Nike+.",
+	},
+	{
 		id: "mount",
 		why: 'Edge reads "Mt." and "Mt" before a name as the letters "M T".',
 		apply: (t) => t.replace(/\bMt\.?(?=\s+\p{Lu})/gu, "Mount"),
